@@ -218,6 +218,20 @@ identity of an application migrated from another framework. Leaving the path
 empty creates a development keystore; use a company-controlled production
 keystore for store releases.
 
+At build time, LynxShip applies those machine credentials through a temporary
+Gradle init script. It does not rewrite `build.gradle`, `build.gradle.kts`,
+`settings.gradle` or any other project file. For standard Android Gradle Plugin
+projects, the adapter uses the official Android Components `finalizeDsl` hook,
+reuses the existing `release` signing configuration when present, and attaches
+it to the `release` build type before Gradle creates the release tasks. The
+temporary script is removed after the build, including after a failure.
+
+This automatic path requires an Android application module with a `release`
+build type and a normal Android Gradle Plugin signing DSL. A custom build
+system, a flavor-only release task, or a proprietary signing plugin that ignores
+the Android signing DSL still needs explicit project integration; LynxShip
+reports that limitation instead of pretending the artifact is signed.
+
 ### Google Play submission
 
 ```bash

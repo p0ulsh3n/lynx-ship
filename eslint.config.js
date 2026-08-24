@@ -8,6 +8,7 @@ export default [
       "**/coverage/**",
       "**/*.tsbuildinfo",
       "**/.vite-temp/**",
+      "**/.tools/**",
       "examples/lynx-basic-template/**",
       "examples/lynx-community-crossplatform/**",
     ],

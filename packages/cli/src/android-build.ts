@@ -1,13 +1,18 @@
 import {
   access,
+  chmod,
   copyFile,
   cp,
   mkdir,
+  mkdtemp,
   readFile,
   readdir,
+  rm,
+  writeFile,
 } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { constants as fsConstants, existsSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assert, sha256, type BuildJob } from "@lynxship/contracts";
 import { transitionBuild } from "@lynxship/build-orchestrator";
@@ -64,6 +69,60 @@ async function signingEnvironment(root: string): Promise<NodeJS.ProcessEnv> {
     `Signed Android builds require configuration. Missing: ${missing.join(", ")}. Run \`lynxship android configure\`.`,
   );
   return { ...process.env, ...values };
+}
+
+async function createSigningInitScript(): Promise<{
+  directory: string;
+  file: string;
+}> {
+  const directory = await mkdtemp(join(tmpdir(), "lynxship-gradle-"));
+  const file = join(directory, "android-signing.init.gradle");
+  const script = `
+def keystorePath = System.getenv("LYNXSHIP_KEYSTORE_PATH")
+def keyAlias = System.getenv("LYNXSHIP_KEY_ALIAS")
+def keystorePassword = System.getenv("LYNXSHIP_KEYSTORE_PASSWORD")
+def keyPassword = System.getenv("LYNXSHIP_KEY_PASSWORD")
+
+gradle.allprojects { project ->
+    project.plugins.withId("com.android.application") {
+        def configureSigning = { android ->
+            def signing = android.signingConfigs.findByName("release")
+            if (signing == null) {
+                signing = android.signingConfigs.create("lynxshipRelease")
+            }
+            signing.storeFile = project.file(keystorePath)
+            signing.storePassword = keystorePassword
+            signing.keyAlias = keyAlias
+            signing.keyPassword = keyPassword
+
+            def release = android.buildTypes.findByName("release")
+            if (release == null) {
+                throw new GradleException(
+                    "LynxShip requires an Android release build type"
+                )
+            }
+            release.signingConfig = signing
+            project.logger.lifecycle(
+                "[LynxShip] Applied machine signing credentials to \${project.path}:release"
+            )
+        }
+
+        def androidComponents = project.extensions.findByName("androidComponents")
+        if (androidComponents != null) {
+            androidComponents.finalizeDsl { android ->
+                configureSigning(android)
+            }
+        } else {
+            project.afterEvaluate {
+                configureSigning(project.extensions.findByName("android"))
+            }
+        }
+    }
+}
+`;
+  await writeFile(file, script, "utf8");
+  await chmod(file, 0o600).catch(() => undefined);
+  return { directory, file };
 }
 
 async function verifySignedArtifact(
@@ -257,6 +316,7 @@ export async function runRealAndroidBuild(
     quiet: options.quiet ?? false,
     onOutput: options.onEvent,
   };
+  let signingInitDirectory: string | undefined;
   try {
     transitionBuild(job, "uploading_source", "local Android source prepared");
     job.logs.push({
@@ -296,7 +356,10 @@ export async function runRealAndroidBuild(
 
     transitionBuild(job, "building", `Gradle ${artifact.task}`);
     step(`Running real Gradle task ${artifact.task}…`);
-    const gradleArgs = [artifact.task];
+    step("Applying temporary LynxShip Android signing adapter…");
+    const signingInitScript = await createSigningInitScript();
+    signingInitDirectory = signingInitScript.directory;
+    const gradleArgs = ["--init-script", signingInitScript.file, artifact.task];
     if (process.env.CI) gradleArgs.push("--stacktrace");
     await runProcess(wrapper, gradleArgs, {
       cwd: android,
@@ -383,5 +446,8 @@ export async function runRealAndroidBuild(
       at: new Date().toISOString(),
     });
     throw error;
+  } finally {
+    if (signingInitDirectory)
+      await rm(signingInitDirectory, { recursive: true, force: true });
   }
 }

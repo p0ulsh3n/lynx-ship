@@ -97,6 +97,21 @@ Progress percentages are shown only when LynxShip has a real measurement. Long
 Rspeedy, Gradle and Xcode operations remain visible in the event journal until
 their completion checkpoint is known; no timer-based percentage is invented.
 
+### Project-safe Android signing
+
+LynxShip does not require every project to contain a LynxShip-specific signing
+helper. During a real Android build it creates a temporary Gradle init script,
+passes it with Gradle's `--init-script` option, and removes it when the build
+finishes. The script reads only the already configured machine credentials and
+uses the Android Components `finalizeDsl` hook to configure the standard
+`release` build type. The project's Gradle files are left unchanged.
+
+This supports normal Android Gradle Plugin application projects using either
+Groovy or Kotlin DSL. Projects with custom flavor tasks, non-standard signing
+plugins, or no Android `release` build type must expose their signing contract
+explicitly; LynxShip fails with a clear diagnostic rather than producing an
+unverified artifact.
+
 ## Main commands
 
 ```text
