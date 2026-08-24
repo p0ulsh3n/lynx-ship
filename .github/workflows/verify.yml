@@ -47,3 +47,83 @@ jobs:
 
           exit 1
       - run: pnpm verify
+
+  ios:
+    runs-on: macos-15
+    name: iOS toolchain and host guard
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v2
+        with:
+          version: 11.19.0
+          runtime: node@24
+          install: false
+          cache: false
+      - name: Show Apple toolchain
+        run: |
+          node --version
+          pnpm --version
+          xcodebuild -version
+          xcode-select -p
+      - name: Build official Lynx iOS simulator fixture
+        shell: bash
+        run: |
+          fixture="$RUNNER_TEMP/integrating-lynx-demo-projects"
+          git clone --depth 1 https://github.com/lynx-family/integrating-lynx-demo-projects.git "$fixture"
+          pushd "$fixture/ios/HelloLynxSwift"
+          pod install --no-repo-update
+          xcodebuild \
+            -workspace Hello-Lynx.xcworkspace \
+            -scheme Hello-Lynx \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          popd
+      - name: Install dependencies
+        shell: bash
+        run: |
+          pnpm config set registry https://registry.npmjs.org/
+          pnpm config set network-concurrency 8
+          pnpm config set fetch-retries 5
+          pnpm config set fetch-timeout 120000
+          pnpm install --frozen-lockfile --reporter=append-only
+      - name: Build CLI
+        run: pnpm --filter @lynxship/cli build
+      - name: Verify iOS host diagnostics
+        shell: bash
+        run: |
+          doctor_output="$(node packages/cli/dist/index.js doctor \
+            --project-dir examples/lynx-basic-template \
+            --platform ios --json)"
+          printf '%s\n' "$doctor_output"
+          DOCTOR_OUTPUT="$doctor_output" node <<'NODE'
+          const result = JSON.parse(process.env.DOCTOR_OUTPUT);
+          const host = result.checks.find((check) => check.name === "ios-host");
+          if (!host || host.status !== "fail") {
+            throw new Error("The iOS doctor must report a missing native host.");
+          }
+          NODE
+      - name: Verify real iOS builds never fall back to a fake artifact
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.LYNXSHIP_R2_ACCOUNT_ID || '00000000000000000000000000000000' }}
+          R2_BUCKET: ${{ secrets.LYNXSHIP_R2_BUCKET || 'lynxship-ci' }}
+          R2_ACCESS_KEY_ID: ${{ secrets.LYNXSHIP_R2_ACCESS_KEY_ID || 'ci-test-access' }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.LYNXSHIP_R2_SECRET_ACCESS_KEY || 'ci-test-secret' }}
+        run: |
+          set +e
+          build_output="$(node packages/cli/dist/index.js build \
+            --project-dir examples/lynx-basic-template \
+            --platform ios --profile production --json --non-interactive)"
+          status=$?
+          set -e
+          printf '%s\n' "$build_output"
+          test "$status" -eq 1
+          BUILD_OUTPUT="$build_output" node <<'NODE'
+          const result = JSON.parse(process.env.BUILD_OUTPUT);
+          if (result.code !== "IOS_HOST_REQUIRED") {
+            throw new Error(`Expected IOS_HOST_REQUIRED, received ${result.code}`);
+          }
+          NODE

@@ -709,6 +709,8 @@ async function main(): Promise<void> {
     const autolink = await inspectAutolink(root);
     const autolinkForPlatform = autolink[doctorPlatform];
     const lockfile = await findLockfile(root);
+    const androidHost =
+      doctorPlatform === "android" ? await hasAndroidHost(root) : false;
     const nodeMajor = Number(process.versions.node.split(".")[0]);
     const nodeSupported = nodeMajor >= 22;
     const nodeRecommended = nodeMajor % 2 === 0;
@@ -739,6 +741,18 @@ async function main(): Promise<void> {
         status: config.projectId ? "pass" : "fail",
         value: config.projectId ? "found" : "missing · fix: lynxship init",
       },
+      ...(doctorPlatform === "android"
+        ? [
+            {
+              name: "android-host",
+              ok: androidHost,
+              status: androidHost ? ("pass" as const) : ("fail" as const),
+              value: androidHost
+                ? "Gradle host found"
+                : "missing · add an Android host with android/gradlew",
+            },
+          ]
+        : []),
       {
         name: "cloudflare-r2",
         ok: configuration.r2,
@@ -1369,6 +1383,12 @@ async function main(): Promise<void> {
           false,
           "IOS_HOST_REQUIRED",
           "A macOS Xcode host is required for a real iOS build. No local fake iOS build is created.",
+        );
+      if (platform === "android" && !realAndroid && !args.includes("--local"))
+        assert(
+          false,
+          "ANDROID_HOST_REQUIRED",
+          "A real Android build requires an Android Gradle host. Add android/gradlew and the native Lynx host, or use --local for contract tests.",
         );
       if (realAndroid) {
         await runRealAndroidBuild(job, {

@@ -47,9 +47,16 @@ test("TypeScript CLI init/build/update use persistent local state", async () => 
   };
   const init = await runCli(cwd, ["init", "--non-interactive", "--json"]);
   assert.equal(init.code, 0);
-  const build = await runCli(
+  const realBuild = await runCli(
     cwd,
     ["build", "--platform", "android", "--json"],
+    environment,
+  );
+  assert.equal(realBuild.code, 1);
+  assert.equal(JSON.parse(realBuild.stdout).code, "ANDROID_HOST_REQUIRED");
+  const build = await runCli(
+    cwd,
+    ["build", "--platform", "android", "--local", "--json"],
     environment,
   );
   assert.equal(build.code, 0);
@@ -96,7 +103,7 @@ test("CLI blocks operational commands before R2 and signing setup", async () => 
   assert.equal(init.code, 0);
   const build = await runCli(
     cwd,
-    ["build", "--platform", "android", "--json"],
+    ["build", "--platform", "android", "--local", "--json"],
     environment,
   );
   assert.equal(build.code, 2);
@@ -134,7 +141,7 @@ test("CLI blocks real OTA after a native project change", async () => {
   );
   const build = await runCli(
     cwd,
-    ["build", "--platform", "android", "--json"],
+    ["build", "--platform", "android", "--local", "--json"],
     environment,
   );
   assert.equal(build.code, 0);

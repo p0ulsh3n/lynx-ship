@@ -1,4 +1,11 @@
-import { access, copyFile, mkdir, readFile } from "node:fs/promises";
+import {
+  access,
+  copyFile,
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+} from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -165,6 +172,53 @@ export function hasAndroidHost(root: string): Promise<boolean> {
     .catch(() => false);
 }
 
+/**
+ * Copy the standard Rspeedy output into the Android host assets directory.
+ *
+ * This is intentionally handled by LynxShip instead of requiring every
+ * project to carry a helper script. Rspeedy writes bundles and static assets
+ * to `dist`, while the Lynx Android host reads them from `app/src/main/assets`.
+ */
+export async function syncLynxAssets(root: string): Promise<string[]> {
+  const distRoot = join(root, "dist");
+  const assetsRoot = join(root, "android", "app", "src", "main", "assets");
+  let entries;
+
+  try {
+    entries = await readdir(distRoot, { withFileTypes: true });
+  } catch {
+    throw new Error(
+      `Rspeedy output directory is missing: ${distRoot}. Run the project build first.`,
+    );
+  }
+
+  const bundles = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".lynx.bundle"))
+    .map((entry) => entry.name);
+  assert(
+    bundles.length > 0,
+    "LYNX_BUNDLE_MISSING",
+    `No .lynx.bundle was found in ${distRoot}. Check the Rspeedy output configuration.`,
+  );
+
+  await mkdir(assetsRoot, { recursive: true });
+  const outputNames = [...bundles, "async", "static"];
+  const copied: string[] = [];
+
+  for (const name of outputNames) {
+    const source = join(distRoot, name);
+    if (!existsSync(source)) continue;
+
+    await cp(source, join(assetsRoot, name), {
+      force: true,
+      recursive: true,
+    });
+    copied.push(name);
+  }
+
+  return copied;
+}
+
 export async function runRealAndroidBuild(
   job: BuildJob,
   options: AndroidBuildOptions,
@@ -217,11 +271,12 @@ export async function runRealAndroidBuild(
       "syncing Lynx bundle into Android assets",
     );
     step("Syncing bundle into the Android host…");
-    await runProcess(process.execPath, [join("android", "sync-bundle.mjs")], {
-      cwd: options.root,
-      env: environment,
-      ...processOptions,
-    });
+    const copiedAssets = await syncLynxAssets(options.root);
+    for (const name of copiedAssets) {
+      options.onEvent?.(
+        `Synced dist/${name} -> android/app/src/main/assets/${name}`,
+      );
+    }
     step("Android host synchronized", 40);
 
     transitionBuild(job, "building", `Gradle ${artifact.task}`);

@@ -446,6 +446,18 @@ lynxship submit --project-dir "$PROJECT_DIR" --platform android --latest --json 
 Configure the package manager, Android SDK, Java, R2 and store credentials in
 the runner environment or its native secret manager.
 
+The repository workflow also runs an iOS job on a pinned GitHub-hosted
+`macos-15` runner. It checks the Xcode toolchain, compiles the official
+`HelloLynxSwift` simulator fixture, and verifies that a project without an iOS
+native host fails with `IOS_HOST_REQUIRED` instead of producing a fake
+artifact. A real signed IPA job additionally requires an iOS Xcode host, Apple
+certificates/provisioning and protected App Store Connect credentials.
+
+For GitHub Actions, store R2 values as repository secrets named
+`LYNXSHIP_R2_ACCOUNT_ID`, `LYNXSHIP_R2_BUCKET`, `LYNXSHIP_R2_ACCESS_KEY_ID` and
+`LYNXSHIP_R2_SECRET_ACCESS_KEY`. Never place the values directly in YAML; the
+workflow has harmless test fallbacks when those secrets are not configured.
+
 ## Repository development
 
 ```bash
