@@ -10,7 +10,7 @@ class ViewController: UIViewController {
       builder.screenSize = self.view.frame.size
       builder.fontScale = 1.0
     }
-    
+
     lynxView.preferredLayoutWidth = self.view.frame.size.width
     lynxView.preferredLayoutHeight = self.view.frame.size.height
     lynxView.layoutWidthMode = .exact

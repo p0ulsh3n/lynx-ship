@@ -111,6 +111,115 @@ test("TypeScript CLI init/build/update use persistent local state", async () => 
   );
 });
 
+test("android host init scaffolds a native host without overwriting projects", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-android-host-"));
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({ dependencies: { "@lynx-js/rspeedy": "4.0.0" } }),
+  );
+  const result = await runCli(cwd, [
+    "android",
+    "host",
+    "init",
+    "--application-id",
+    "com.example.demo",
+    "--non-interactive",
+    "--json",
+  ]);
+
+  assert.equal(result.code, 0);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    status: "created",
+    platform: "android",
+    directory: join(cwd, "android"),
+    applicationId: "com.example.demo",
+  });
+  assert.match(
+    await readFile(
+      join(
+        cwd,
+        "android",
+        "app",
+        "src",
+        "main",
+        "java",
+        "com",
+        "example",
+        "demo",
+        "MainActivity.java",
+      ),
+      "utf8",
+    ),
+    /package com\.example\.demo;/,
+  );
+
+  const second = await runCli(cwd, [
+    "android",
+    "host",
+    "init",
+    "--application-id",
+    "com.example.other",
+    "--non-interactive",
+    "--json",
+  ]);
+  assert.equal(second.code, 1);
+  assert.equal(JSON.parse(second.stdout).code, "ANDROID_HOST_EXISTS");
+});
+
+test("ios host init scaffolds an Xcode host without overwriting projects", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-ios-host-"));
+  const init = await runCli(cwd, ["init", "--non-interactive", "--json"]);
+  assert.equal(init.code, 0);
+  const result = await runCli(cwd, [
+    "ios",
+    "host",
+    "init",
+    "--bundle-identifier",
+    "com.example.demo",
+    "--non-interactive",
+    "--json",
+  ]);
+
+  assert.equal(result.code, 0);
+  const parsed = JSON.parse(result.stdout) as {
+    status: string;
+    platform: string;
+    bundleIdentifier: string;
+    project: string;
+    scheme: string;
+    configUpdated: boolean;
+  };
+  assert.equal(parsed.status, "created");
+  assert.equal(parsed.platform, "ios");
+  assert.equal(parsed.bundleIdentifier, "com.example.demo");
+  assert.equal(parsed.project, `ios/${parsed.scheme}.xcodeproj`);
+  assert.match(parsed.scheme, /^LynxshipIosHost/);
+  assert.equal(parsed.configUpdated, true);
+  assert.match(
+    await readFile(
+      join(cwd, "ios", `${parsed.scheme}.xcodeproj`, "project.pbxproj"),
+      "utf8",
+    ),
+    /PRODUCT_BUNDLE_IDENTIFIER = "com\.example\.demo";/,
+  );
+  assert.match(
+    await readFile(join(cwd, "lynxship.json"), "utf8"),
+    new RegExp(`"project": "${parsed.project}"`),
+  );
+
+  const second = await runCli(cwd, [
+    "ios",
+    "host",
+    "init",
+    "--bundle-identifier",
+    "com.example.other",
+    "--non-interactive",
+    "--json",
+  ]);
+  assert.equal(second.code, 1);
+  assert.equal(JSON.parse(second.stdout).code, "IOS_HOST_EXISTS");
+});
+
 test("CLI blocks operational commands before R2 and signing setup", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "lynxship-guard-"));
   const isolatedAppData = await mkdtemp(join(tmpdir(), "lynxship-config-"));
