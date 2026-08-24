@@ -22,11 +22,28 @@ jobs:
           version: 11.19.0
           runtime: node@${{ matrix.node-version }}
           install: false
-          cache: true
+          cache: false
       - name: Show toolchain
         run: |
           node --version
           pnpm --version
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --reporter=append-only
+        shell: bash
+        run: |
+          pnpm config set registry https://registry.npmjs.org/
+          pnpm config set network-concurrency 8
+          pnpm config set fetch-retries 5
+          pnpm config set fetch-timeout 120000
+
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile --reporter=append-only; then
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 10))
+            fi
+          done
+
+          exit 1
       - run: pnpm verify
