@@ -1,0 +1,9 @@
+{
+  "name": "@lynxship/sdk-ios",
+  "version": "0.1.0",
+  "private": true,
+  "privateStatus": "Beta source",
+  "scripts": {
+    "typecheck": "node -e \"require('node:fs').accessSync('Sources/LynxShipOtaClient.swift')\""
+  }
+}

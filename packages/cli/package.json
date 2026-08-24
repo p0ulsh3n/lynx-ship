@@ -1,0 +1,76 @@
+{
+  "name": "@lynxship/cli",
+  "version": "0.1.0",
+  "description": "Build, sign, store, submit and update LynxJS applications from the terminal.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "lynxjs",
+    "lynx",
+    "mobile",
+    "android",
+    "ios",
+    "ota",
+    "build",
+    "cli"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "lynxship": "dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./runtime-fingerprint": {
+      "types": "./dist/runtime-fingerprint.d.ts",
+      "import": "./dist/runtime-fingerprint.js"
+    },
+    "./autolink": {
+      "types": "./dist/autolink.d.ts",
+      "import": "./dist/autolink.js"
+    },
+    "./ui/*": {
+      "types": "./dist/ui/*.d.ts",
+      "import": "./dist/ui/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1116.0",
+    "@aws-sdk/lib-storage": "3.1116.0",
+    "@aws-sdk/s3-request-presigner": "3.1116.0",
+    "@lynxship/build-orchestrator": "workspace:*",
+    "@lynxship/contracts": "workspace:*",
+    "@lynxship/db": "workspace:*",
+    "@lynxship/signing": "workspace:*",
+    "@lynxship/submit": "workspace:*",
+    "boxen": "8.0.1",
+    "chalk": "5.4.1",
+    "cli-progress": "3.12.0",
+    "ora": "8.2.0",
+    "qrcode-terminal": "0.12.0"
+  },
+  "devDependencies": {
+    "@types/cli-progress": "3.11.6",
+    "@types/qrcode-terminal": "0.12.2"
+  }
+}

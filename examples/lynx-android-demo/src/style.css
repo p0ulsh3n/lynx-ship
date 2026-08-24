@@ -1,0 +1,84 @@
+page {
+  background-color: #07131f;
+  color: #e2eaf4;
+  font-size: calc(100vw / 23.4375);
+}
+
+.root {
+  display: linear;
+  linear-gravity: center;
+  padding: 2rem;
+}
+
+.eyebrow {
+  color: #00d4aa;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08rem;
+  margin-bottom: 0.75rem;
+}
+
+.title {
+  color: #e2eaf4;
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+
+.description {
+  color: #8da3ba;
+  font-size: 1rem;
+  line-height: 1.35rem;
+  margin-bottom: 2rem;
+  text-align: center;
+  white-space: normal;
+}
+
+.card {
+  background-color: #102235;
+  border: 1px solid #1d3850;
+  border-radius: 1rem;
+  margin-bottom: 1rem;
+  padding: 1.25rem;
+  width: 19rem;
+}
+
+.card-label {
+  color: #5a7393;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.card-value {
+  color: #4f9eff;
+  font-size: 1.1rem;
+}
+
+.counter-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.counter-card .card-label {
+  margin-bottom: 0;
+}
+
+.counter {
+  color: #a78bfa;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.button {
+  background-color: #00d4aa;
+  border-radius: 0.75rem;
+  color: #07131f;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 1rem 1.5rem;
+  width: 19rem;
+}

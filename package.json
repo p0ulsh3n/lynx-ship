@@ -1,0 +1,35 @@
+{
+  "name": "lynxship",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small, testable LynxJS build, submit and OTA control plane.",
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "test": "pnpm --filter @lynxship/cli build && tsx --test test/core.test.ts test/api.test.ts test/cli.test.ts test/cli-ui.test.ts",
+    "lint": "pnpm structure:check && tsx scripts/lint.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "structure:fix": "eslint . --fix",
+    "structure:check": "eslint .",
+    "check": "pnpm format:check && pnpm lint && pnpm test",
+    "verify": "pnpm check && pnpm -r typecheck && pnpm exec tsc -p tsconfig.json --noEmit && pnpm --filter @lynxship/dashboard build && tsx scripts/verify-release.ts",
+    "start": "pnpm --filter @lynxship/api build && node packages/api/dist/server.js",
+    "build": "tsx scripts/build.ts",
+    "dashboard:dev": "pnpm --filter @lynxship/dashboard dev",
+    "dashboard:build": "pnpm --filter @lynxship/dashboard build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "22.0.0",
+    "@typescript-eslint/parser": "8.67.0",
+    "eslint": "10.9.0",
+    "prettier": "3.7.4",
+    "tsx": "4.19.0",
+    "typescript": "5.9.2"
+  }
+}

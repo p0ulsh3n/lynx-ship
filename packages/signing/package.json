@@ -1,0 +1,29 @@
+{
+  "name": "@lynxship/signing",
+  "version": "0.1.0",
+  "description": "Signing and verification primitives for LynxShip OTA manifests.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false"
+  },
+  "dependencies": {
+    "@lynxship/contracts": "workspace:*"
+  }
+}

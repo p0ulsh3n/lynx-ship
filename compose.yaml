@@ -1,0 +1,70 @@
+services:
+  api:
+    build: .
+    command: node packages/api/dist/server.js
+    environment:
+      LYNXSHIP_PORT: "8787"
+      LYNXSHIP_STATE_DIR: /var/lib/lynxship
+      LYNXSHIP_DATABASE_DRIVER: postgres
+      LYNXSHIP_QUEUE_DRIVER: redis
+      LYNXSHIP_STORAGE_DRIVER: r2
+      DATABASE_URL: postgresql://lynxship:dev-only-change-me@postgres:5432/lynxship
+      REDIS_URL: redis://queue:6379
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - lynxship_state:/var/lib/lynxship
+    depends_on:
+      postgres:
+        condition: service_healthy
+      queue:
+        condition: service_healthy
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: "node"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8787/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lynxship
+      POSTGRES_USER: lynxship
+      POSTGRES_PASSWORD: dev-only-change-me
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [default]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lynxship -d lynxship"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  queue:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - queue_data:/data
+    networks: [default]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  lynxship_state:
+  postgres_data:
+  queue_data:

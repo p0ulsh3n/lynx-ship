@@ -1,0 +1,10 @@
+{
+  "name": "@lynxship/worker-android",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "privateStatus": "Planned",
+  "scripts": {
+    "typecheck": "echo Android worker is Planned; exit 0"
+  }
+}

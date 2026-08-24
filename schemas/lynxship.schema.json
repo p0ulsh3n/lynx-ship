@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.lynxship.dev/v1/lynxship.schema.json",
+  "title": "LynxShip configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "projectId": { "type": "string", "minLength": 1 },
+    "cli": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "apiUrl": { "type": "string", "format": "uri-reference" },
+        "organizationId": { "type": "string", "minLength": 1 },
+        "token": { "type": "string", "minLength": 1 }
+      }
+    },
+    "runtimeVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policy": { "enum": ["fingerprint", "manual"] },
+        "value": { "type": "string", "minLength": 1 }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "ios": {
+            "type": "object",
+            "properties": {
+              "configuration": { "type": "string" },
+              "distribution": { "type": "string" },
+              "workspace": { "type": "string" },
+              "project": { "type": "string" },
+              "scheme": { "type": "string" },
+              "exportOptionsPlist": { "type": "string" },
+              "bundleScript": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "submit": { "type": "object" },
+    "update": { "type": "object" },
+    "artifacts": {
+      "type": "object",
+      "properties": { "retentionDays": { "type": "integer", "minimum": 1 } },
+      "additionalProperties": true
+    }
+  }
+}

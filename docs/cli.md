@@ -1,0 +1,78 @@
+# CLI design system
+
+The CLI follows the terminal-first LynxShip identity defined in the normative specification. The visual layer is isolated in `packages/cli/src/ui` so command logic does not duplicate formatting rules.
+
+## Tokens
+
+The LynxShip brand follows the Lynx community CLI visual language: a pink to
+cyan gradient from `#ff6b9d` to `#45b7d1`. The gradient is used for the
+Braille logo, section headers, prompts and primary completion surfaces. The
+semantic tokens below keep build events readable and distinguishable.
+
+| Token     | Color     | Use                                    |
+| --------- | --------- | -------------------------------------- |
+| `brand`   | gradient  | logo, headings, prompts and primary UI |
+| `teal`    | `#45B7D1` | steps, progress and command names      |
+| `tealDim` | `#2F91AB` | secondary accent                       |
+| `blue`    | `#72C7DF` | flags, channels, informational values  |
+| `orange`  | `#FF9A8B` | warnings and progress context          |
+| `yellow`  | `#F6C15D` | warnings and pending states            |
+| `red`     | `#FF6B7A` | errors and failures                    |
+| `purple`  | `#C5A0FF` | IDs                                    |
+| `green`   | `#58D6B4` | successful/stable states               |
+| `text`    | `#F4F8FB` | primary text                           |
+| `muted`   | `#91A8B8` | labels and secondary text              |
+| `dim`     | `#526B7C` | separators and version text            |
+
+## Components
+
+Interactive output uses this rhythm:
+
+```text
+optional Braille banner
+section header
+log lines
+summary box
+final status line
+```
+
+The reusable components are `sectionHeader`, `log`, `summaryBox`, `createProgress`, `spin`, `pill` and `finalLine`. The banner is hardcoded in `ui/logo.ts` and contains no runtime image/conversion dependency.
+
+Progress values are rendered with up to two decimal places. The build pipeline
+only advances determinate progress at completed checkpoints and uses the
+Cloudflare R2/S3-compatible HTTP upload progress events for artifact transfer.
+When Rspeedy, Gradle or
+Xcode does not expose a trustworthy total, the percentage stays blank while
+the live event journal remains visible instead of inventing timer-based
+progress.
+
+Build event journal lines use semantic colors: commands are blue, LynxShip
+steps are teal, successful tool output is green, warnings are yellow, errors
+are red, and neutral compiler output uses the primary text color. The event
+classifier stays in the presentation layer; build execution only emits plain
+messages.
+
+Event prefixes are intentionally text-based (`[CMD]`, `[STEP]`, `[OK]`,
+`[WARN]`, `[ERROR]`, `[LOG]`) so they remain readable in CMD, PowerShell,
+Unix terminals and CI logs without depending on emoji glyph support.
+
+## TTY, CI and JSON
+
+- Decorations are enabled only on an interactive TTY.
+- `--json`, `--quiet`, `--no-color`, `--non-interactive`, `CI=1` and `NO_COLOR` disable decorative output as appropriate.
+- Progress bars and spinners never run in CI, JSON or non-TTY output.
+- `--json` emits one stable JSON object on stdout; errors include `error` and `code`.
+- Unicode icons have ASCII fallbacks.
+- The CLI never prints a shell prompt.
+
+## Dependencies
+
+The CLI uses only the presentation dependencies needed by the specification:
+
+- `chalk` for exact ANSI colors;
+- the ANSI-safe brand renderer for the Lynx brand gradient;
+- `boxen` for width-aware summary boxes;
+- `ora` for TTY-only spinners;
+- `cli-progress` for TTY-only progress bars.
+
+The command implementation remains explicit rather than hiding business behavior behind a large CLI framework.

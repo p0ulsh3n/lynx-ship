@@ -1,0 +1,17 @@
+{
+  "runtimeVersion": {
+    "policy": "fingerprint"
+  },
+  "build": {
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "environment": "production"
+    }
+  },
+  "update": {
+    "protocolVersion": 1,
+    "channel": "production"
+  },
+  "projectId": "lynxship_basic_template"
+}

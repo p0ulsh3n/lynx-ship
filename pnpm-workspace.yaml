@@ -1,0 +1,13 @@
+packages:
+  - "packages/*"
+  - "examples/*"
+  - "!examples/lynx-community-crossplatform"
+
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  "@biomejs/biome": set this to true or false
+  core-js: set this to true or false
+  electron: set this to true or false
+  electron-winstaller: set this to true or false
+  esbuild: true

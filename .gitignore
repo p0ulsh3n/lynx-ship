@@ -1,0 +1,31 @@
+node_modules/
+.lynxship/
+**/.lynxship/
+coverage/
+dist/
+*.log
+*.tsbuildinfo
+build/
+**/build/
+.tools/
+.android/
+
+# External community example kept as its own repository.
+examples/lynx-community-crossplatform/
+
+# Local credentials and provider configuration. Never commit these files.
+.credentials.dpapi.json
+**/.credentials.dpapi.json
+r2.json
+**/r2.json
+
+# Generated Android/Gradle state and local signing material.
+**/.gradle/
+**/local.properties
+**/android/app/src/main/assets/main.lynx.bundle
+**/android/keystore/
+
+# Local environment files. Keep explicit examples/templates trackable.
+.env
+.env.*
+!.env.example

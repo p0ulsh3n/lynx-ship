@@ -1,0 +1,6 @@
+image: node:24-bookworm-slim
+
+verify:
+  script:
+    - npm ci
+    - npm run verify

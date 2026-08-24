@@ -1,0 +1,21 @@
+{
+  "name": "@lynxship/lynx-android-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "rspeedy dev",
+    "build": "rspeedy build",
+    "android:sync": "node android/sync-bundle.mjs",
+    "android:debug": "pnpm build && pnpm android:sync && android\\gradlew.bat -p android assembleDebug",
+    "android:release": "pnpm build && pnpm android:sync && android\\gradlew.bat -p android assembleRelease",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@lynx-js/rspeedy": "0.16.5",
+    "@lynx-js/type-element-api": "0.0.10",
+    "@lynx-js/types": "4.1.0",
+    "@lynx-js/vanilla-rsbuild-plugin": "0.0.2",
+    "typescript": "5.9.2"
+  }
+}

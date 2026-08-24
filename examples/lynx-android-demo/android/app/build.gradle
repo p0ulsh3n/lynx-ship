@@ -1,0 +1,109 @@
+plugins {
+    id "com.android.application"
+}
+
+def releaseKeyPath = providers.gradleProperty("lynxshipKeystorePath")
+    .orElse(System.getenv("LYNXSHIP_KEYSTORE_PATH") ?: "")
+    .get()
+def releaseKeyAlias = providers.gradleProperty("lynxshipKeyAlias")
+    .orElse(System.getenv("LYNXSHIP_KEY_ALIAS") ?: "lynxship-demo")
+    .get()
+def releaseStorePassword = providers.gradleProperty("lynxshipStorePassword")
+    .orElse(System.getenv("LYNXSHIP_KEYSTORE_PASSWORD") ?: "")
+    .get()
+def releaseKeyPassword = providers.gradleProperty("lynxshipKeyPassword")
+    .orElse(System.getenv("LYNXSHIP_KEY_PASSWORD") ?: "")
+    .get()
+def hasReleaseSigning = releaseKeyPath && releaseStorePassword && releaseKeyPassword
+def otaConfigValue = { value ->
+    value.toString()
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+}
+def otaEndpoint = providers.gradleProperty("lynxshipOtaEndpoint")
+    .orElse(System.getenv("LYNXSHIP_OTA_ENDPOINT") ?: "")
+    .get()
+def otaProjectId = providers.gradleProperty("lynxshipOtaProjectId")
+    .orElse(System.getenv("LYNXSHIP_OTA_PROJECT_ID") ?: "lynxship_android_demo")
+    .get()
+def otaRuntimeVersion = providers.gradleProperty("lynxshipOtaRuntimeVersion")
+    .orElse(System.getenv("LYNXSHIP_RUNTIME_VERSION") ?: "")
+    .get()
+def otaPublicKeyId = providers.gradleProperty("lynxshipOtaPublicKeyId")
+    .orElse(System.getenv("LYNXSHIP_OTA_PUBLIC_KEY_ID") ?: "")
+    .get()
+def otaPublicKey = providers.gradleProperty("lynxshipOtaPublicKey")
+    .orElse(System.getenv("LYNXSHIP_OTA_PUBLIC_KEY") ?: "")
+    .get()
+
+android {
+    namespace "com.lynxship.androiddemo"
+    compileSdk 35
+    buildToolsVersion "35.0.0"
+
+    defaultConfig {
+        applicationId "com.lynxship.androiddemo"
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "0.1.0"
+        buildConfigField "String", "LYNXSHIP_OTA_ENDPOINT", "\"${otaConfigValue(otaEndpoint)}\""
+        buildConfigField "String", "LYNXSHIP_OTA_PROJECT_ID", "\"${otaConfigValue(otaProjectId)}\""
+        buildConfigField "String", "LYNXSHIP_OTA_RUNTIME_VERSION", "\"${otaConfigValue(otaRuntimeVersion)}\""
+        buildConfigField "String", "LYNXSHIP_OTA_PUBLIC_KEY_ID", "\"${otaConfigValue(otaPublicKeyId)}\""
+        buildConfigField "String", "LYNXSHIP_OTA_PUBLIC_KEY", "\"${otaConfigValue(otaPublicKey)}\""
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseKeyPath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+        }
+        release {
+            minifyEnabled false
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    packaging {
+        resources {
+            excludes += ["/META-INF/{AL2.0,LGPL2.1}"]
+        }
+    }
+}
+
+dependencies {
+    implementation project(":lynxship-sdk-android")
+    implementation "org.lynxsdk.lynx:lynx:4.0.0"
+    implementation "org.lynxsdk.lynx:lynx-jssdk:4.0.0"
+    implementation "org.lynxsdk.lynx:lynx-trace:4.0.0"
+    implementation "org.lynxsdk.lynx:primjs:4.0.0"
+    implementation "org.lynxsdk.lynx:lynx-service-log:4.0.0"
+    implementation "org.lynxsdk.lynx:lynx-service-http:4.0.0"
+    implementation "com.squareup.okhttp3:okhttp:4.9.0"
+}

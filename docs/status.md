@@ -1,0 +1,29 @@
+# Feature status
+
+| Area                                                                                              | Status                              | Evidence                                                                                   |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------ |
+| Configuration and runtime fingerprint                                                             | Beta automatic compatibility guard  | Native/config/autolink mutation tests; build/update integration                            |
+| Token hashing, scopes and revocation                                                              | Stable in local foundation          | Unit tests                                                                                 |
+| Build state machine and retry/cancel rules                                                        | Stable in local foundation          | Unit tests                                                                                 |
+| Worker registration and heartbeat                                                                 | Stable in local foundation          | Unit tests                                                                                 |
+| Content-addressed local storage                                                                   | Stable in local foundation          | Unit tests                                                                                 |
+| Signed OTA manifest and compatibility guard                                                       | Beta                                | Unit/API tests plus automatic native-change block                                          |
+| Android OTA client source                                                                         | Beta native source                  | Android Gradle compilation; physical-device activation and rollback test                   |
+| iOS OTA client source                                                                             | Beta native source                  | Swift/CryptoKit compilation; physical-device activation and rollback test                  |
+| Channels, rollout and rollback                                                                    | Beta                                | Unit and API tests                                                                         |
+| Submission job contract                                                                           | Beta with local and store providers | Unit tests and provider contract tests                                                     |
+| Local CLI/API, persistent JSON state, optional HTTP auth/rate limit                               | Beta                                | CLI/API smoke tests                                                                        |
+| React + TypeScript + Vite dashboard with TanStack Router/Query, Tailwind and shadcn/ui primitives | Beta                                | Strict typecheck, Vite build and browser smoke test                                        |
+| pnpm workspace contracts/auth/db/queue/storage packages                                           | Beta                                | Recursive workspace typecheck                                                              |
+| TypeScript signing, build-orchestrator, worker-agent, build-providers and submit packages         | Beta                                | Strict package typechecks; integration gates remain                                        |
+| Fastify API package                                                                               | Beta                                | Package typecheck, Fastify inject tests and local `/health` smoke test                     |
+| TypeScript CLI package and terminal design system                                                 | Beta local workflows                | CLI smoke tests, strict typecheck, TTY components, Braille banner and JSON/CI output rules |
+| Single-node Compose profile                                                                       | Beta packaging                      | Docker health checks, `/ready`, PostgreSQL/Redis and external R2 artifact mode             |
+| LynxJS Android example                                                                            | Beta example                        | `pnpm --filter @lynxship/lynx-android-demo typecheck` and Lynx bundle build                |
+| Android native Lynx host, real CLI build, R2 upload and locally signed APK                        | Beta local workflow                 | Rspeedy, Gradle 8.7, Android SDK API 35, `apksigner`, R2 URL/QR smoke test                 |
+| Android/iOS cloud worker build and signing                                                        | Planned                             | Requires isolated platform workers and production credentials                              |
+| Google Play/App Store Connect adapters                                                            | Beta local integration              | Real Publisher/Transporter paths; live validation requires provider credentials            |
+| Postgres/Redis service wiring and external R2 artifact registration                               | Beta self-host                      | Docker persistence, restart and CLI artifact metadata smoke test                           |
+| Production isolation, observability, backups and DR                                               | Planned                             | Operations acceptance gate                                                                 |
+
+The status table prevents the specification's target behavior from being mistaken for shipped behavior.

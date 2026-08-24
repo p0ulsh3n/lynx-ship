@@ -1,0 +1,77 @@
+plugins {
+    id "com.android.application"
+}
+
+def releaseKeyPath = providers.gradleProperty("lynxshipKeystorePath")
+    .orElse(System.getenv("LYNXSHIP_KEYSTORE_PATH") ?: "")
+    .get()
+def releaseKeyAlias = providers.gradleProperty("lynxshipKeyAlias")
+    .orElse(System.getenv("LYNXSHIP_KEY_ALIAS") ?: "lynxship-demo")
+    .get()
+def releaseStorePassword = providers.gradleProperty("lynxshipStorePassword")
+    .orElse(System.getenv("LYNXSHIP_KEYSTORE_PASSWORD") ?: "")
+    .get()
+def releaseKeyPassword = providers.gradleProperty("lynxshipKeyPassword")
+    .orElse(System.getenv("LYNXSHIP_KEY_PASSWORD") ?: "")
+    .get()
+def hasReleaseSigning = releaseKeyPath && releaseStorePassword && releaseKeyPassword
+
+android {
+    namespace "com.lynxship.androiddemo"
+    compileSdk 35
+    buildToolsVersion "35.0.0"
+
+    defaultConfig {
+        applicationId "com.lynxship.androiddemo"
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "0.1.0"
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseKeyPath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+        }
+        release {
+            minifyEnabled false
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        resources {
+            excludes += ["/META-INF/{AL2.0,LGPL2.1}"]
+        }
+    }
+}
+
+dependencies {
+    implementation "org.lynxsdk.lynx:lynx:4.0.0"
+    implementation "org.lynxsdk.lynx:lynx-jssdk:4.0.0"
+    implementation "org.lynxsdk.lynx:lynx-trace:4.0.0"
+    implementation "org.lynxsdk.lynx:primjs:4.0.0"
+    implementation "org.lynxsdk.lynx:lynx-service-log:4.0.0"
+    implementation "org.lynxsdk.lynx:lynx-service-http:4.0.0"
+    implementation "com.squareup.okhttp3:okhttp:4.9.0"
+}

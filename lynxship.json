@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schemas.lynxship.dev/v1/lynxship.schema.json",
+  "runtimeVersion": {
+    "policy": "fingerprint"
+  },
+  "build": {
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "environment": "production",
+      "android": {
+        "artifact": "aab"
+      },
+      "ios": {
+        "configuration": "Release",
+        "distribution": "app-store"
+      }
+    }
+  },
+  "update": {
+    "protocolVersion": 1,
+    "channel": "production",
+    "checkOnLaunch": true,
+    "codeSigning": {
+      "required": true
+    },
+    "rollout": {
+      "defaultPercentage": 100,
+      "assignment": "stable-installation-hash"
+    }
+  },
+  "artifacts": {
+    "retentionDays": 30
+  },
+  "projectId": "local_project"
+}

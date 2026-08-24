@@ -1,0 +1,27 @@
+{
+  "$schema": "../../schemas/lynxship.schema.json",
+  "projectId": "lynxship_android_demo",
+  "runtimeVersion": {
+    "policy": "fingerprint"
+  },
+  "build": {
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "environment": "production",
+      "android": {
+        "artifact": "apk"
+      }
+    }
+  },
+  "update": {
+    "protocolVersion": 1,
+    "channel": "production",
+    "rollout": {
+      "defaultPercentage": 100
+    }
+  },
+  "artifacts": {
+    "retentionDays": 30
+  }
+}
