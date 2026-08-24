@@ -89,6 +89,7 @@ jobs:
           keytool -genkeypair \
             -noprompt \
             -keystore "$keystore" \
+            -storetype JKS \
             -storepass "lynxship-ci-store" \
             -keypass "lynxship-ci-key" \
             -alias lynxship-ci \
