@@ -23,30 +23,19 @@ import { nativeArtifactName } from "./artifact-name.js";
 import {
   commandExists,
   executableExists,
-  packageManagerScriptCommand,
   runProcess,
 } from "./process-runner.js";
+import { buildLynxBundle } from "./bundle-build.js";
 
 interface AndroidBuildOptions {
   root: string;
   profile: BuildProfile;
   uploadArtifacts?: boolean;
+  skipBundleBuild?: boolean;
   quiet?: boolean;
   onStep?: (message: string) => void;
   onEvent?: (message: string) => void;
   onProgress?: (value?: number, label?: string) => void;
-}
-
-async function projectBuildCommand(root: string): Promise<string[]> {
-  try {
-    const packageJson = JSON.parse(
-      await readFile(join(root, "package.json"), "utf8"),
-    ) as { scripts?: Record<string, string> };
-    if (packageJson.scripts?.["build:mobile"]) return ["run", "build:mobile"];
-  } catch {
-    // The package manager will report the useful project error below.
-  }
-  return ["run", "build"];
 }
 
 async function signingEnvironment(root: string): Promise<NodeJS.ProcessEnv> {
@@ -324,16 +313,15 @@ export async function runRealAndroidBuild(
       message: "rspeedy:build",
       at: new Date().toISOString(),
     });
-    step("Building Lynx bundle with Rspeedy…");
-    const packageManager = packageManagerScriptCommand(
-      options.root,
-      (await projectBuildCommand(options.root))[1] ?? "build",
-    );
-    await runProcess(packageManager.command, packageManager.args, {
-      cwd: options.root,
-      env: environment,
-      ...processOptions,
-    });
+    if (options.skipBundleBuild) {
+      step("Using shared Lynx bundle", 20);
+    } else {
+      step("Building Lynx bundle with Rspeedy…");
+      await buildLynxBundle(options.root, {
+        env: environment,
+        ...processOptions,
+      });
+    }
     step("Rspeedy bundle ready", 20);
 
     transitionBuild(job, "queued", "Android build queued locally");

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createColors } from "@lynxship/cli/ui/colors";
+import { formatEvent } from "@lynxship/cli/ui/components";
 import { LOGO } from "@lynxship/cli/ui/logo";
 import { terminalOptions } from "@lynxship/cli/ui/terminal";
 
@@ -35,4 +36,13 @@ test("CLI output flags disable decorations consistently", () => {
     noColor: true,
     nonInteractive: true,
   });
+});
+
+test("CLI event journal uses semantic markers", () => {
+  const stripAnsi = (value: string) => value.replace(/\u001b\[[0-9;]*m/g, "");
+  assert.match(stripAnsi(formatEvent("warning: no-source")), /^  ! /);
+  assert.match(stripAnsi(formatEvent("ready built in 1s")), /^  (?:◆|\*) /);
+  assert.match(stripAnsi(formatEvent("Build queued…")), /^  - /);
+  assert.match(stripAnsi(formatEvent("Error: failed")), /^  x /);
+  assert.match(stripAnsi(formatEvent("Gradle task output")), /^  (?:│|\|) /);
 });

@@ -1,0 +1,361 @@
+export interface CliGuidance {
+  commands: string[];
+  note?: string;
+}
+
+const guidance: Record<string, CliGuidance> = {
+  CLI_PROJECT_REQUIRED: {
+    commands: ["lynxship init", "lynxship doctor"],
+    note: "Run them from the project directory or add --project-dir <path>.",
+  },
+  CLI_PROJECT_ID_REQUIRED: {
+    commands: ["lynxship init", "lynxship doctor"],
+  },
+  CLI_R2_REQUIRED: {
+    commands: ["lynxship storage configure", "lynxship doctor"],
+  },
+  CLI_R2_ACCOUNT_ID: {
+    commands: ["lynxship storage configure"],
+    note: "Use the 32-character Cloudflare account ID.",
+  },
+  CLI_R2_BUCKET: {
+    commands: ["lynxship storage configure"],
+    note: "Use a lowercase R2 bucket name with no spaces or underscores.",
+  },
+  CLI_R2_ENDPOINT: {
+    commands: ["lynxship storage configure"],
+    note: "Use the HTTPS S3 endpoint for the same Cloudflare account.",
+  },
+  CLI_R2_EXPIRY: {
+    commands: ["lynxship storage configure"],
+    note: "Choose a download lifetime between 1 second and 7 days.",
+  },
+  CLI_R2_CREDENTIALS: {
+    commands: ["lynxship storage configure", "lynxship doctor"],
+  },
+  BUILD_SIGNING_REQUIRED: {
+    commands: [
+      "lynxship android configure",
+      "lynxship doctor --platform android",
+    ],
+    note: "An existing .jks/.keystore is supported; production builds need a real release key.",
+  },
+  LYNXSHIP_KEYSTORE_PATH: {
+    commands: ["lynxship android configure"],
+  },
+  LYNXSHIP_KEY_ALIAS: {
+    commands: ["lynxship android configure"],
+  },
+  LYNXSHIP_KEYSTORE_PASSWORD: {
+    commands: ["lynxship android configure"],
+  },
+  LYNXSHIP_KEY_PASSWORD: {
+    commands: ["lynxship android configure"],
+  },
+  ANDROID_HOST_REQUIRED: {
+    commands: [
+      "lynxship dev",
+      "lynxship android host init --application-id com.example.myapp",
+      "lynxship doctor --platform android",
+      "lynxship build --platform android --profile production",
+    ],
+    note: "Use dev for Lynx Explorer. The host init path is required for a real APK/AAB; --local is only a contract test.",
+  },
+  ANDROID_HOST_EXISTS: {
+    commands: ["lynxship doctor --platform android"],
+    note: "Review the existing android/ host instead of overwriting it.",
+  },
+  ANDROID_APPLICATION_ID_INVALID: {
+    commands: ["lynxship android host init --application-id com.example.myapp"],
+    note: "Use a reverse-domain Android application ID, for example com.company.app.",
+  },
+  ANDROID_PLATFORM_UNSUPPORTED: {
+    commands: ["lynxship doctor --platform android"],
+    note: "Android builds run on Windows, macOS or Linux. Use macOS for iOS builds.",
+  },
+  BUILD_ALL_MACOS_REQUIRED: {
+    commands: [
+      "lynxship build --platform android --profile production",
+      "lynxship build --platform all --profile production --no-upload",
+    ],
+    note: "Run the all-platform command on a macOS machine or macOS CI worker; the second command is for CI verification.",
+  },
+  ANDROID_APKSIGNER_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform android",
+      'sdkmanager "build-tools;latest"',
+    ],
+    note: "Ensure Android SDK Build Tools are installed and available through ANDROID_HOME or ANDROID_SDK_ROOT.",
+  },
+  ANDROID_JARSIGNER_REQUIRED: {
+    commands: ["lynxship doctor --platform android", "java -version"],
+    note: "Install JDK 17 or newer and make sure jarsigner is on PATH.",
+  },
+  ANDROID_ADB_REQUIRED: {
+    commands: ["lynxship doctor --platform android", "adb devices"],
+    note: "Install Android SDK Platform-Tools and connect or start a device.",
+  },
+  LYNX_BUNDLE_MISSING: {
+    commands: ["lynxship dev", "lynxship build --platform android"],
+    note: "Build the Lynx bundle with the project's configured package manager.",
+  },
+  IOS_HOST_REQUIRED: {
+    commands: [
+      "lynxship dev",
+      "lynxship ios host init --bundle-identifier com.example.myapp",
+      "lynxship doctor --platform ios",
+      "lynxship build --platform ios --profile production",
+    ],
+    note: "Use dev for Lynx Explorer. A real IPA requires macOS, Xcode and an iOS host.",
+  },
+  IOS_HOST_EXISTS: {
+    commands: ["lynxship doctor --platform ios"],
+    note: "Review the existing ios/ host instead of overwriting it.",
+  },
+  IOS_BUNDLE_IDENTIFIER_INVALID: {
+    commands: ["lynxship ios host init --bundle-identifier com.example.myapp"],
+    note: "Use a reverse-domain bundle identifier, for example com.company.app.",
+  },
+  IOS_MACOS_REQUIRED: {
+    commands: ["lynxship doctor --platform ios"],
+    note: "Run real iOS commands on macOS. Windows and Linux cannot produce an IPA.",
+  },
+  IOS_XCODE_REQUIRED: {
+    commands: ["xcode-select --install", "lynxship doctor --platform ios"],
+    note: "Install Xcode from the Mac App Store and select its command-line tools.",
+  },
+  IOS_XCRUN_REQUIRED: {
+    commands: ["xcode-select --install", "lynxship doctor --platform ios"],
+  },
+  IOS_COCOAPODS_REQUIRED: {
+    commands: ["brew install cocoapods", "lynxship build --platform ios"],
+    note: "CocoaPods is required when the iOS host contains a Podfile.",
+  },
+  IOS_PROJECT_REQUIRED: {
+    commands: [
+      "lynxship ios host init --bundle-identifier com.example.myapp",
+      "lynxship doctor --platform ios",
+    ],
+  },
+  IOS_SCHEME_REQUIRED: {
+    commands: ["lynxship inspect", "lynxship doctor --platform ios"],
+    note: "Set build.<profile>.ios.scheme in lynxship.json.",
+  },
+  IOS_EXPORT_OPTIONS_REQUIRED: {
+    commands: [
+      "lynxship ios host init --bundle-identifier com.example.myapp",
+      "lynxship doctor --platform ios",
+    ],
+    note: "Set build.<profile>.ios.exportOptionsPlist to a valid export options file.",
+  },
+  IOS_DEVICE_REQUIRED: {
+    commands: [
+      "xcrun devicectl list devices",
+      "lynxship run --platform ios --device <device-id>",
+    ],
+  },
+  IOS_DEVICE_LOGS_UNSUPPORTED: {
+    commands: [
+      "xcrun simctl list devices",
+      "lynxship logs --platform ios --device <simulator-id>",
+    ],
+  },
+  DEVICE_ARTIFACT_REQUIRED: {
+    commands: [
+      "lynxship build --platform android --profile production",
+      "lynxship run --platform android --artifact <path-to-apk>",
+    ],
+  },
+  LYNX_CODEGEN_SCRIPT_REQUIRED: {
+    commands: [
+      "lynxship autolink check --platform android",
+      "lynxship autolink codegen --library-dir <native-library>",
+    ],
+    note: "The native library must expose its official codegen script.",
+  },
+  LYNX_AUTOLINK_ANDROID_REQUIRED: {
+    commands: [
+      "lynxship autolink check --platform android",
+      "lynxship autolink codegen --library-dir <native-library>",
+    ],
+  },
+  LYNX_AUTOLINK_IOS_REQUIRED: {
+    commands: [
+      "lynxship autolink check --platform ios",
+      "lynxship autolink codegen --library-dir <native-library>",
+    ],
+  },
+  OTA_HOST_INTEGRATION_REQUIRED: {
+    commands: [
+      "lynxship ota doctor --platform android",
+      "lynxship ota doctor --platform ios",
+    ],
+    note: "Integrate the LynxShip OTA client in the native host before publishing updates.",
+  },
+  OTA_NATIVE_CHANGE_REQUIRED: {
+    commands: [
+      "lynxship ota doctor --platform android",
+      "lynxship build --platform android --profile production",
+      "lynxship update --platform android --bundle dist/main.lynx.bundle",
+    ],
+    note: "Native changes require a new compatible binary before an OTA release.",
+  },
+  OTA_BUNDLE_REQUIRED: {
+    commands: [
+      "lynxship build --platform android --profile production",
+      "lynxship update --platform android --bundle dist/main.lynx.bundle",
+    ],
+  },
+  BUILD_REQUIRED: {
+    commands: ["lynxship build --platform android --profile production"],
+  },
+  STORE_ARTIFACT_REQUIRED: {
+    commands: [
+      "lynxship build --platform android --profile production",
+      "lynxship submit --platform android --latest",
+    ],
+  },
+  STORE_SUBMISSION_REQUIRED: {
+    commands: [
+      "lynxship store configure --platform android",
+      "lynxship submit --platform android --latest",
+    ],
+  },
+  RELEASE_NOT_FOUND: {
+    commands: [
+      "lynxship update --platform android",
+      "lynxship update rollback --help",
+    ],
+  },
+  ROLLBACK_RELEASE_REQUIRED: {
+    commands: [
+      'lynxship update rollback --platform android --release-id <release-id> --reason "reason"',
+    ],
+  },
+  ROLLBACK_REASON_REQUIRED: {
+    commands: [
+      'lynxship update rollback --platform android --release-id <release-id> --reason "reason"',
+    ],
+  },
+  CLI_INTERACTIVE_REQUIRED: {
+    commands: ["lynxship <command>"],
+    note: "Run without --non-interactive, or provide the documented CI environment variables.",
+  },
+  PROFILE_NOT_FOUND: {
+    commands: ["lynxship inspect", "lynxship build --profile production"],
+    note: "Use a profile declared under build in lynxship.json.",
+  },
+  PLATFORM_INVALID: {
+    commands: [
+      "lynxship build --platform android",
+      "lynxship build --platform ios",
+      "lynxship build --platform all",
+    ],
+  },
+  IOS_SIGNATURE_INVALID: {
+    commands: [
+      "lynxship doctor --platform ios",
+      "lynxship build --platform ios --profile production",
+    ],
+    note: "Check the Apple certificate, provisioning profile, team and export options.",
+  },
+};
+
+export function guidanceForError(error: unknown): CliGuidance {
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === "string" && guidance[code]) return guidance[code];
+
+  if (typeof code === "string") {
+    if (code.startsWith("SUBMISSION_") || code.startsWith("AUTH_")) {
+      return {
+        commands: [
+          "lynxship store configure --platform android",
+          "lynxship submit --platform android --latest",
+        ],
+        note: "Check the provider credentials and required account permissions.",
+      };
+    }
+    if (code.startsWith("OTA_")) {
+      return {
+        commands: [
+          "lynxship ota doctor --platform android",
+          "lynxship update --platform android --bundle dist/main.lynx.bundle",
+        ],
+      };
+    }
+    if (code.startsWith("CONFIG_")) {
+      return {
+        commands: ["lynxship init", "lynxship doctor"],
+      };
+    }
+    if (code.startsWith("BUILD_")) {
+      return {
+        commands: [
+          "lynxship doctor --platform android",
+          "lynxship build --platform android --profile production",
+        ],
+        note: "Inspect the first failed build event before retrying.",
+      };
+    }
+    if (code.startsWith("STORE_")) {
+      return {
+        commands: [
+          "lynxship store configure --platform android",
+          "lynxship submit --platform android --latest",
+        ],
+      };
+    }
+    if (code.startsWith("IOS_")) {
+      return {
+        commands: [
+          "lynxship doctor --platform ios",
+          "lynxship build --platform ios --profile production",
+        ],
+      };
+    }
+    if (code.startsWith("ANDROID_")) {
+      return {
+        commands: [
+          "lynxship doctor --platform android",
+          "lynxship build --platform android --profile production",
+        ],
+      };
+    }
+    if (code.startsWith("CLI_")) {
+      return { commands: ["lynxship --help"] };
+    }
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  if (/pnpm|npm|yarn|corepack|not recognized|not found/i.test(message)) {
+    return {
+      commands: ["corepack enable", "pnpm install", "lynxship doctor"],
+      note: "Use the package manager selected by the project's lockfile.",
+    };
+  }
+  if (/ENOENT|no such file or directory/i.test(message)) {
+    return {
+      commands: ["lynxship init", "lynxship doctor"],
+      note: "Check that the project directory and required configuration files exist.",
+    };
+  }
+  if (/gradle|gradlew|android sdk|build tools/i.test(message)) {
+    return {
+      commands: [
+        "lynxship doctor --platform android",
+        "lynxship build --platform android --profile production",
+      ],
+      note: "Check JDK 17, Android SDK, Build Tools and the project Gradle wrapper.",
+    };
+  }
+  if (/xcode|xcrun|cocoapods|pod install/i.test(message)) {
+    return {
+      commands: [
+        "lynxship doctor --platform ios",
+        "lynxship build --platform ios",
+      ],
+      note: "Check macOS, Xcode command-line tools and CocoaPods.",
+    };
+  }
+  return { commands: [] };
+}

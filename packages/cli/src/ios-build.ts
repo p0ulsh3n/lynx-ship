@@ -6,16 +6,14 @@ import { transitionBuild } from "@lynxship/build-orchestrator";
 import type { BuildProfile } from "./config.js";
 import { loadR2, uploadR2Artifact } from "./r2.js";
 import { nativeArtifactName } from "./artifact-name.js";
-import {
-  commandExists,
-  packageManagerScriptCommand,
-  runProcess,
-} from "./process-runner.js";
+import { commandExists, runProcess } from "./process-runner.js";
+import { buildLynxBundle } from "./bundle-build.js";
 
 interface IosBuildOptions {
   root: string;
   profile: BuildProfile;
   uploadArtifacts?: boolean;
+  skipBundleBuild?: boolean;
   quiet?: boolean;
   onEvent?: (message: string) => void;
   onProgress?: (value?: number, label?: string) => void;
@@ -151,13 +149,15 @@ export async function runRealIosBuild(
     if (uploadArtifacts) await loadR2(options.root);
     await mkdir(archiveDirectory, { recursive: true });
     transitionBuild(job, "uploading_source", "iOS source prepared");
-    step("Building Lynx bundle with Rspeedy…", 5);
-    const packageManager = packageManagerScriptCommand(options.root, "build");
-    await runProcess(packageManager.command, packageManager.args, {
-      cwd: options.root,
-      quiet: options.quiet,
-      onOutput: options.onEvent,
-    });
+    if (options.skipBundleBuild) {
+      step("Using shared Lynx bundle", 5);
+    } else {
+      step("Building Lynx bundle with Rspeedy…", 5);
+      await buildLynxBundle(options.root, {
+        quiet: options.quiet,
+        onOutput: options.onEvent,
+      });
+    }
     if (ios.bundleScript) {
       step("Syncing bundle into the iOS host…", 8);
       await runProcess(

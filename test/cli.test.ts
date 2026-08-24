@@ -57,7 +57,17 @@ test("TypeScript CLI init/build/update use persistent local state", async () => 
     environment,
   );
   assert.equal(realBuild.code, 1);
-  assert.equal(JSON.parse(realBuild.stdout).code, "ANDROID_HOST_REQUIRED");
+  const realBuildError = JSON.parse(realBuild.stdout) as {
+    code: string;
+    nextSteps: string[];
+  };
+  assert.equal(realBuildError.code, "ANDROID_HOST_REQUIRED");
+  assert.deepEqual(realBuildError.nextSteps, [
+    "lynxship dev",
+    "lynxship android host init --application-id com.example.myapp",
+    "lynxship doctor --platform android",
+    "lynxship build --platform android --profile production",
+  ]);
   const build = await runCli(
     cwd,
     ["build", "--platform", "android", "--local", "--json"],
@@ -108,6 +118,43 @@ test("TypeScript CLI init/build/update use persistent local state", async () => 
   assert.match(
     await readFile(join(cwd, ".lynxship", ".env"), "utf8"),
     /POSTGRES_PASSWORD=/,
+  );
+});
+
+test("build all creates Android and iOS contract jobs", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-build-all-"));
+  const keystore = join(cwd, "test-signing.jks");
+  await writeFile(keystore, "test keystore placeholder");
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    CLOUDFLARE_ACCOUNT_ID: "0".repeat(32),
+    R2_BUCKET: "test",
+    R2_ACCESS_KEY_ID: "test-access-key",
+    R2_SECRET_ACCESS_KEY: "test-secret-key",
+    LYNXSHIP_KEYSTORE_PATH: keystore,
+    LYNXSHIP_KEY_ALIAS: "test",
+    LYNXSHIP_KEYSTORE_PASSWORD: "test-password",
+    LYNXSHIP_KEY_PASSWORD: "test-password",
+  };
+  const init = await runCli(cwd, ["init", "--non-interactive", "--json"]);
+  assert.equal(init.code, 0);
+  const result = await runCli(
+    cwd,
+    ["build", "all", "--local", "--json"],
+    environment,
+  );
+  assert.equal(result.code, 0);
+  const parsed = JSON.parse(result.stdout) as {
+    status: string;
+    builds: Array<{ platform: string; state: string }>;
+  };
+  assert.equal(parsed.status, "success");
+  assert.deepEqual(
+    parsed.builds.map((build) => [build.platform, build.state]),
+    [
+      ["android", "success"],
+      ["ios", "success"],
+    ],
   );
 });
 

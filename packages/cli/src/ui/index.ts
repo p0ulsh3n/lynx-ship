@@ -3,6 +3,7 @@ import {
   log,
   sectionHeader,
   summaryBox,
+  nextSteps,
   createProgress,
   spin,
   downloadArtifact,
@@ -17,6 +18,7 @@ import {
   terminalOptions,
   type TerminalOptions,
 } from "./terminal.js";
+import type { CliGuidance } from "../guidance.js";
 
 export class CliUi {
   readonly options: TerminalOptions;
@@ -62,6 +64,11 @@ export class CliUi {
     if (!this.options.json) log.error(message);
   }
 
+  nextSteps(guidance: CliGuidance): void {
+    if (this.options.json || this.options.quiet) return;
+    nextSteps(guidance.commands, guidance.note);
+  }
+
   summary(title: string, rows: BoxRow[]): void {
     if (this.interactive) summaryBox(title, rows);
   }
@@ -94,4 +101,4 @@ export function createCliUi(args: string[]): CliUi {
 
 export { terminalOptions };
 
-export type { BoxRow, TerminalOptions };
+export type { BoxRow, ProgressHandle, TerminalOptions };

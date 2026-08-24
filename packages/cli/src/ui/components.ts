@@ -19,13 +19,13 @@ export function sectionHeader(title: string): void {
 
 export const log = {
   success(message: string): void {
-    console.log(`  ${c.teal("[OK]  ")} ${c.text(message)}`);
+    console.log(`  ${c.green("◆")} ${c.text(message)}`);
   },
   warn(message: string): void {
-    console.log(`  ${c.yellow("[WARN]")} ${c.yellow(message)}`);
+    console.log(`  ${c.yellow("!")} ${c.yellow(message)}`);
   },
   error(message: string): void {
-    console.error(`  ${c.red("[ERROR]")} ${c.red(message)}`);
+    console.error(`  ${c.red("x")} ${c.red(message)}`);
   },
   info(message: string): void {
     console.log(`  ${c.muted(message)}`);
@@ -145,7 +145,7 @@ function eventTone(message: string): EventTone {
   return "output";
 }
 
-function formatEvent(message: string): string {
+export function formatEvent(message: string): string {
   const colors = {
     command: c.blue,
     step: c.teal,
@@ -155,17 +155,16 @@ function formatEvent(message: string): string {
     output: c.text,
   };
   const tone = eventTone(message);
-  const tag = {
-    command: "[CMD]",
-    step: "[STEP]",
-    success: "[OK]",
-    warning: "[WARN]",
-    error: "[ERROR]",
-    output: "[LOG]",
-  }[tone];
   const normalized = message.trim().replace(/^\$\s*/, "");
-  const rail = supportsUnicode() ? "│" : "|";
-  return `  ${colors[tone](rail)} ${colors[tone](tag.padEnd(7))} ${colors[tone](normalized)}`;
+  const marker = {
+    command: supportsUnicode() ? "➜" : ">",
+    step: "-",
+    success: supportsUnicode() ? "◆" : "*",
+    warning: "!",
+    error: "x",
+    output: supportsUnicode() ? "│" : "|",
+  }[tone];
+  return `  ${colors[tone](marker)} ${colors[tone](normalized)}`;
 }
 
 const activeAnimations = new Set<() => void>();
@@ -207,6 +206,7 @@ export function createProgress(
   let spinnerIndex = 0;
   let currentValue = 0;
   let hasMeasuredValue = false;
+  let previousTone: EventTone | undefined;
   const formatPercent = (value: number): string =>
     `${value.toFixed(2).replace(/\.?0+$/, "")}%`;
   const bar = new cliProgress.SingleBar({
@@ -236,9 +236,12 @@ export function createProgress(
   });
   const logEvent = (message: string): void => {
     if (!bar.isActive) return;
+    const tone = eventTone(message);
     bar.stop();
+    if (tone === "output" && previousTone === "output") console.log();
     console.log(formatEvent(message));
     bar.start(100, currentValue, payload(currentLabel));
+    previousTone = tone;
   };
   return {
     event: logEvent,
@@ -279,11 +282,11 @@ export function spin(text: string, enabled: boolean): SpinnerHandle {
   const untrack = trackAnimation(() => spinner.stop());
   return {
     succeed: (message) => {
-      spinner.succeed(`${c.teal("[OK]")} ${c.text(message)}`);
+      spinner.succeed(`${c.green("◆")} ${c.text(message)}`);
       untrack();
     },
     fail: (message) => {
-      spinner.fail(`${c.red("[ERROR]")} ${c.red(message)}`);
+      spinner.fail(`${c.red("x")} ${c.red(message)}`);
       untrack();
     },
     stop: () => {
@@ -312,6 +315,15 @@ export const pill = {
 
 export function finalLine(message: string, success = true): void {
   console.log(`\n${success ? c.brand("◆") : c.red("◆")} ${c.text(message)}`);
+}
+
+export function nextSteps(commands: string[], note?: string): void {
+  if (commands.length === 0) return;
+  console.error(`\n${c.yellow("Next steps")}`);
+  commands.forEach((command, index) => {
+    console.error(`  ${c.muted(`${index + 1}.`)} ${c.teal(command)}`);
+  });
+  if (note) console.error(`  ${c.muted(note)}`);
 }
 
 export function downloadArtifact(

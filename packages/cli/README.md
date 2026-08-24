@@ -120,6 +120,7 @@ doctor               Check the local toolchain and project
 dev                  Run Rspeedy dev with Lynx Explorer QR/HMR
 preview              Preview the production bundle locally
 build create         Build, sign and upload an artifact
+build all            Build Android and iOS on a macOS host
 build list           List build jobs
 build status <id>    Inspect one build job
 build cancel <id>    Cancel a build job
@@ -142,6 +143,47 @@ store configure      Configure store submission credentials
 Use `lynxship --help` or `lynxship <command> --help` for the complete option
 list. `--json`, `--quiet`, `--no-color` and `--non-interactive` are available
 for automation.
+
+### Actionable error guidance
+
+Recoverable errors print a `Next steps` section with the exact commands to
+run. For example, a pure LynxJS project without a native Android host reports
+the two supported paths instead of stopping at a generic Gradle error:
+
+```text
+x This project has no Android Gradle host...
+
+Next steps
+  1. lynxship dev
+  2. lynxship android host init --application-id com.example.myapp
+  3. lynxship doctor --platform android
+  4. lynxship build --platform android --profile production
+```
+
+`lynxship dev` is for Lynx Explorer and live QR/HMR development. The Android
+host command creates the native Gradle project needed for a real APK/AAB.
+`--local` remains a contract-test mode and never creates a fake artifact.
+
+To build both native platforms in one local workflow, use the multi-platform
+selector:
+
+```bash
+lynxship build --platform all --profile production
+# equivalent convenience form:
+lynxship build all --profile production
+```
+
+This builds Android and iOS concurrently after one shared Lynx bundle step.
+Their jobs, progress events and artifacts remain isolated. A real local `all`
+build requires macOS, an Android host, an iOS Xcode host and the corresponding
+signing setup. Windows and Linux can still run
+`lynxship build --platform android`; use a macOS CI worker for the iOS half.
+`--local` can exercise both contract paths without creating APK or IPA files.
+
+The same guidance covers missing R2 or signing setup, Android SDK tools,
+Autolink/codegen, iOS Xcode/CocoaPods, device tools, store credentials and
+OTA compatibility. In automation, use `--json`; failures include a
+machine-readable `nextSteps` array and optional `note` field.
 
 ## OTA rollback
 

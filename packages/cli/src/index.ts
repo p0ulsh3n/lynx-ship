@@ -58,7 +58,7 @@ import {
   credentialStorageDescription,
   loadCredentials,
 } from "./secure-store.js";
-import { createCliUi, type BoxRow } from "./ui/index.js";
+import { createCliUi, type BoxRow, type ProgressHandle } from "./ui/index.js";
 import { globalLynxShipDirectory } from "./paths.js";
 import { inspectAutolink, requireAutolinkReady } from "./autolink.js";
 import {
@@ -74,6 +74,8 @@ import {
   runProcess,
   runRspeedy,
 } from "./process-runner.js";
+import { guidanceForError } from "./guidance.js";
+import { buildLynxBundle } from "./bundle-build.js";
 
 interface CliRelease {
   id: string;
@@ -323,9 +325,183 @@ async function saveState(
   builds: BuildOrchestrator,
   submissions: SubmissionService,
 ): Promise<void> {
-  state.builds = builds.list();
-  state.submissions = submissions.list();
-  await repository.write(state);
+  const next = stateSaveQueue.then(async () => {
+    state.builds = builds.list();
+    state.submissions = submissions.list();
+    await repository.write(state);
+  });
+  stateSaveQueue = next.catch(() => undefined);
+  await next;
+}
+
+let stateSaveQueue = Promise.resolve();
+
+interface BuildExecutionOptions {
+  config: LynxShipConfig;
+  profile: string;
+  platform: Platform;
+  skipUpload: boolean;
+  wait: boolean;
+  local: boolean;
+  state: CliState;
+  repository: JsonRepository<CliState>;
+  builds: BuildOrchestrator;
+  submissions: SubmissionService;
+  progress?: ProgressHandle;
+  progressPrefix?: string;
+  onProgress?: (value?: number, label?: string) => void;
+  onEvent?: (message: string) => void;
+  skipBundleBuild?: boolean;
+}
+
+async function executeBuild(
+  options: BuildExecutionOptions,
+  showResult = true,
+): Promise<BuildJob> {
+  const {
+    config,
+    profile,
+    platform,
+    skipUpload,
+    wait,
+    local,
+    state,
+    repository,
+    builds,
+    submissions,
+    progress: sharedProgress,
+    progressPrefix,
+    onProgress,
+    onEvent,
+    skipBundleBuild,
+  } = options;
+  await requireAutolinkReady(root, platform);
+  const runtime = await inspectRuntimeFingerprint(root, platform, config);
+  const job = await builds.create({
+    projectId: configuredProjectId(config),
+    organizationId: "local_org",
+    platform,
+    profile,
+    sourceHash: createHash("sha256").update(root).digest("hex"),
+    runtimeVersion: runtime.value,
+    runtimeInputs: runtime.inputs,
+  });
+  ui.info(`Using profile: ${profile} · platform: ${platform}`);
+  const ownsProgress = !sharedProgress;
+  const progress =
+    sharedProgress ??
+    ui.progress(platform === "android" ? "Android build" : "iOS build");
+  const prefix = progressPrefix ? `${progressPrefix} · ` : "";
+  const reportEvent = (message: string): void => {
+    if (onEvent) onEvent(message);
+    else progress.event(`${prefix}${message}`);
+  };
+  const reportProgress = (value?: number, label?: string): void => {
+    if (onProgress) onProgress(value, label);
+    else progress.update(value, label ? `${prefix}${label}` : undefined);
+  };
+  try {
+    reportProgress(undefined, "Preparing build pipeline…");
+    if (wait) {
+      if (platform === "android" && !isSupportedAndroidPlatform() && !local)
+        assert(
+          false,
+          "ANDROID_PLATFORM_UNSUPPORTED",
+          "Android builds are supported only on Linux, macOS and Windows.",
+        );
+      const realAndroid =
+        platform === "android" &&
+        isSupportedAndroidPlatform() &&
+        (await hasAndroidHost(root));
+      const realIos =
+        platform === "ios" && hasIosHost(root, config.build?.[profile]);
+      if (platform === "ios" && !realIos && !local)
+        assert(
+          false,
+          "IOS_HOST_REQUIRED",
+          "A macOS Xcode host is required for a real iOS build. No local fake iOS build is created.",
+        );
+      if (platform === "android" && !realAndroid && !local)
+        assert(
+          false,
+          "ANDROID_HOST_REQUIRED",
+          "This project has no Android Gradle host. For live development, run `lynxship dev` and scan the QR code with Lynx Explorer; for an APK/AAB, integrate the official Lynx Android host under `android/` (including android/gradlew). `--local` is only for contract tests and does not create an APK.",
+        );
+      if (realAndroid) {
+        await runRealAndroidBuild(job, {
+          root,
+          profile: config.build?.[profile] ?? {},
+          uploadArtifacts: !skipUpload,
+          skipBundleBuild,
+          quiet: json,
+          onEvent: reportEvent,
+          onProgress: reportProgress,
+        });
+      } else if (realIos) {
+        await runRealIosBuild(job, {
+          root,
+          profile: config.build?.[profile] ?? {},
+          uploadArtifacts: !skipUpload,
+          skipBundleBuild,
+          quiet: json,
+          onEvent: reportEvent,
+          onProgress: reportProgress,
+        });
+      } else {
+        await builds.run(job.id);
+      }
+    }
+    reportProgress(100);
+    await saveState(state, repository, builds, submissions);
+  } catch (error) {
+    await saveState(state, repository, builds, submissions);
+    if (error instanceof Error) {
+      Object.assign(error, { buildId: job.id });
+    }
+    throw error;
+  } finally {
+    if (ownsProgress) progress.stop();
+  }
+  const result = builds.get(job.id);
+  if (showResult) {
+    printValue(result, {
+      title: `${platform === "android" ? "Android" : "iOS"} build result`,
+      rows: [
+        { label: "Build ID", value: result.id, valueColor: "purple" },
+        { label: "Platform", value: result.platform, valueColor: "blue" },
+        { label: "Profile", value: result.profile, valueColor: "text" },
+        {
+          label: "Status",
+          value: result.state,
+          valueColor: result.state === "success" ? "green" : "yellow",
+        },
+      ],
+      done:
+        result.state === "success"
+          ? "Build complete. Run lynxship submit to publish."
+          : "Build queued.",
+    });
+    if (result.state === "success" && result.artifact?.url)
+      ui.downloadArtifact(result.artifact.url, result.artifact.expiresAt);
+  }
+  return result;
+}
+
+async function buildSharedLynxBundle(): Promise<void> {
+  const progress = ui.progress("Shared Lynx bundle");
+  try {
+    progress.update(
+      undefined,
+      "Building Lynx bundle once for Android and iOS…",
+    );
+    await buildLynxBundle(root, {
+      quiet: json,
+      onOutput: (message) => progress.event(message),
+    });
+    progress.update(100, "Shared Lynx bundle ready");
+  } finally {
+    progress.stop();
+  }
 }
 
 async function initSelfHost(): Promise<{ status: string; file: string }> {
@@ -393,6 +569,7 @@ Commands:
   build status <id>       Show one build job
   build cancel <id>       Cancel a build job
   build retry <id>        Retry a failed build job
+  build all               Build Android and iOS on macOS
   submit                  Submit the latest successful build
   update                  Upload and publish a signed OTA update
   update rollback         Roll back an OTA channel to a previous release
@@ -405,7 +582,7 @@ Commands:
   store configure         Configure Google Play or App Store Connect submission
 
 Build options:
-  --platform <p>          Target android or ios (default: android)
+  --platform <p>          Target android, ios or all for build (default: android)
   --profile <name>        Build profile (default: production)
   --no-wait               Queue the build without executing it locally
   --no-upload              Keep the signed artifact local and skip R2 (CI verification)
@@ -839,7 +1016,7 @@ async function main(): Promise<void> {
         name: "package-manager-lockfile",
         ok: Boolean(lockfile),
         status: lockfile ? "pass" : "fail",
-        value: lockfile ?? "missing · fix: npm install or pnpm install",
+        value: lockfile ?? "missing · fix: pnpm install (or npm install)",
       },
       {
         name: "lynxship.json",
@@ -863,7 +1040,7 @@ async function main(): Promise<void> {
               status: androidHost ? ("pass" as const) : ("fail" as const),
               value: androidHost
                 ? "Gradle host found"
-                : "missing · add an Android host with android/gradlew",
+                : "missing · fix: lynxship android host init --application-id com.example.myapp",
             },
           ]
         : []),
@@ -873,7 +1050,7 @@ async function main(): Promise<void> {
         status: configuration.r2 ? "pass" : "fail",
         value: configuration.r2
           ? "configured"
-          : "run lynxship storage configure",
+          : "missing · fix: lynxship storage configure",
       },
       {
         name: doctorPlatform === "android" ? "android-signing" : "ios-host",
@@ -892,10 +1069,10 @@ async function main(): Promise<void> {
           doctorPlatform === "android"
             ? configuration.android
               ? "configured"
-              : "run lynxship android configure"
+              : "missing · fix: lynxship android configure"
             : process.platform === "darwin" && hasIosHost(root)
               ? "Xcode host found"
-              : "missing · fix: use macOS with Xcode",
+              : "missing · fix: use macOS, then lynxship ios host init --bundle-identifier com.example.myapp",
       },
       {
         name: `lynx-autolink-${doctorPlatform}`,
@@ -1639,7 +1816,9 @@ async function main(): Promise<void> {
   assert(command === "build", "CLI_COMMAND", `Unknown command: ${command}`);
   const subcommand =
     args[0] && !args[0].startsWith("--") ? args.shift() : "create";
-  const platform = platformValue(flag("--platform", "android")!);
+  const platformArgument = flag("--platform", "android")!;
+  const buildAll = subcommand === "all" || platformArgument === "all";
+  const platform = buildAll ? "android" : platformValue(platformArgument);
   const skipUpload = args.includes("--no-upload");
   await requireOperationalConfiguration(platform, { requireR2: !skipUpload });
   if (subcommand === "list") {
@@ -1665,106 +1844,153 @@ async function main(): Promise<void> {
   }
 
   assert(
-    subcommand === "create",
+    subcommand === "create" || buildAll,
     "CLI_BUILD_COMMAND",
     `Unknown build command: ${subcommand}`,
   );
   const config = await loadConfig(root);
   const profile = flag("--profile", "production")!;
-  await requireAutolinkReady(root, platform);
-  const runtime = await inspectRuntimeFingerprint(root, platform, config);
-  const job = await builds.create({
-    projectId: configuredProjectId(config),
-    organizationId: "local_org",
-    platform,
-    profile,
-    sourceHash: createHash("sha256").update(root).digest("hex"),
-    runtimeVersion: runtime.value,
-    runtimeInputs: runtime.inputs,
-  });
-  ui.info(`Using profile: ${profile} · platform: ${platform}`);
-  const progress = ui.progress("Build execution");
-  try {
-    progress.update(undefined, "Preparing build pipeline…");
-    if (!args.includes("--no-wait")) {
-      if (
-        platform === "android" &&
-        !isSupportedAndroidPlatform() &&
-        !args.includes("--local")
-      )
-        assert(
-          false,
-          "ANDROID_PLATFORM_UNSUPPORTED",
-          "Android builds are supported only on Linux, macOS and Windows.",
-        );
-      const realAndroid =
-        platform === "android" &&
-        isSupportedAndroidPlatform() &&
-        (await hasAndroidHost(root));
-      const realIos =
-        platform === "ios" && hasIosHost(root, config.build?.[profile]);
-      if (platform === "ios" && !realIos && !args.includes("--local"))
-        assert(
-          false,
-          "IOS_HOST_REQUIRED",
-          "A macOS Xcode host is required for a real iOS build. No local fake iOS build is created.",
-        );
-      if (platform === "android" && !realAndroid && !args.includes("--local"))
-        assert(
-          false,
-          "ANDROID_HOST_REQUIRED",
-          "This project has no Android Gradle host. For live development, run `lynxship dev` and scan the QR code with Lynx Explorer; for an APK/AAB, integrate the official Lynx Android host under `android/` (including android/gradlew). `--local` is only for contract tests and does not create an APK.",
-        );
-      if (realAndroid) {
-        await runRealAndroidBuild(job, {
-          root,
-          profile: config.build?.[profile] ?? {},
-          uploadArtifacts: !skipUpload,
-          quiet: json,
-          onEvent: (message) => progress.event(message),
-          onProgress: (value, label) => progress.update(value, label),
-        });
-      } else if (realIos) {
-        await runRealIosBuild(job, {
-          root,
-          profile: config.build?.[profile] ?? {},
-          uploadArtifacts: !skipUpload,
-          quiet: json,
-          onEvent: (message) => progress.event(message),
-          onProgress: (value, label) => progress.update(value, label),
-        });
-      } else {
-        await builds.run(job.id);
-      }
-    }
-    progress.update(100);
-    await saveState(state, repository, builds, submissions);
-  } catch (error) {
-    await saveState(state, repository, builds, submissions);
-    throw error;
-  } finally {
-    progress.stop();
+  const wait = !args.includes("--no-wait");
+  const local = args.includes("--local");
+  const platforms: Platform[] = buildAll ? ["android", "ios"] : [platform];
+
+  if (buildAll && wait && !local) {
+    assert(
+      process.platform === "darwin",
+      "BUILD_ALL_MACOS_REQUIRED",
+      "A real build for both Android and iOS requires macOS locally. Use `lynxship build --platform android` on Windows/Linux, or run this command on a macOS CI worker.",
+    );
+    assert(
+      await hasAndroidHost(root),
+      "ANDROID_HOST_REQUIRED",
+      "The Android host is required for `lynxship build --platform all`.",
+    );
+    assert(
+      hasIosHost(root, config.build?.[profile]),
+      "IOS_HOST_REQUIRED",
+      "The iOS Xcode host is required for `lynxship build --platform all`.",
+    );
   }
-  const result = builds.get(job.id);
-  printValue(result, {
-    title: "Build result",
-    rows: [
-      { label: "Build ID", value: result.id, valueColor: "purple" },
-      { label: "Platform", value: result.platform, valueColor: "blue" },
-      { label: "Profile", value: result.profile, valueColor: "text" },
-      {
-        label: "Status",
-        value: result.state,
-        valueColor: result.state === "success" ? "green" : "yellow",
-      },
-    ],
-    done:
-      result.state === "success"
-        ? "Build complete. Run lynxship submit to publish."
-        : "Build queued.",
+
+  if (!buildAll) {
+    await executeBuild({
+      config,
+      profile,
+      platform,
+      skipUpload,
+      wait,
+      local,
+      state,
+      repository,
+      builds,
+      submissions,
+    });
+    return;
+  }
+
+  if (buildAll && wait && !local) await buildSharedLynxBundle();
+
+  const progress = ui.progress("Android + iOS build");
+  const progressValues: Record<Platform, number> = {
+    android: 0,
+    ios: 0,
+  };
+  const progressLabels: Record<Platform, string> = {
+    android: "Starting Android build…",
+    ios: "Starting iOS build…",
+  };
+  const platformName = (target: Platform): string =>
+    target === "android" ? "Android" : "iOS";
+  const outcomes = await Promise.allSettled(
+    platforms.map((target) =>
+      executeBuild(
+        {
+          config,
+          profile,
+          platform: target,
+          skipUpload,
+          wait,
+          local,
+          state,
+          repository,
+          builds,
+          submissions,
+          progress,
+          progressPrefix: platformName(target),
+          skipBundleBuild: wait && !local,
+          onEvent: (message) =>
+            progress.event(`${platformName(target)} · ${message}`),
+          onProgress: (value, label) => {
+            if (value !== undefined) progressValues[target] = value;
+            if (label) progressLabels[target] = label;
+            const average =
+              (progressValues.android + progressValues.ios) / platforms.length;
+            progress.update(
+              average,
+              `${platformName(target)} · ${progressLabels[target]}`,
+            );
+          },
+        },
+        false,
+      ),
+    ),
+  );
+  progress.update(100, "Android and iOS builds finished");
+  progress.stop();
+
+  const summaryBuilds: Array<
+    BuildJob | { platform: Platform; state: "failed"; error: string }
+  > = outcomes.map((outcome, index) => {
+    if (outcome.status === "fulfilled") return outcome.value;
+    const error = outcome.reason;
+    const buildId =
+      error && typeof error === "object" && "buildId" in error
+        ? String(error.buildId)
+        : undefined;
+    const job = buildId ? builds.jobs.get(buildId) : undefined;
+    return (
+      job ?? {
+        platform: platforms[index] ?? "android",
+        state: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
   });
-  if (result.state === "success" && result.artifact?.url)
-    ui.downloadArtifact(result.artifact.url, result.artifact.expiresAt);
+  const failed = summaryBuilds.some((result) => result.state === "failed");
+  printValue(
+    {
+      status: failed
+        ? "failed"
+        : summaryBuilds.every((result) => result.state === "success")
+          ? "success"
+          : "queued",
+      builds: summaryBuilds,
+    },
+    {
+      title: "Build all result",
+      rows: summaryBuilds.map((result) => ({
+        label: platformName(result.platform),
+        value: `${result.state}${"id" in result ? ` · ${result.id}` : ""}`,
+        valueColor:
+          result.state === "success"
+            ? "green"
+            : result.state === "failed"
+              ? "red"
+              : "yellow",
+      })),
+      done: failed
+        ? "At least one platform build failed. Review its events and retry that platform."
+        : "Android and iOS build jobs completed. Submit each successful artifact separately.",
+    },
+  );
+  for (const result of summaryBuilds)
+    if (
+      result.state === "success" &&
+      "artifact" in result &&
+      result.artifact?.url
+    )
+      ui.downloadArtifact(result.artifact.url, result.artifact.expiresAt);
+  if (failed) process.exitCode = 5;
 }
 
 function exitCode(error: unknown): number {
@@ -1781,15 +2007,24 @@ function exitCode(error: unknown): number {
 void main()
   .catch((error: unknown) => {
     const message = error instanceof Error ? error.message : "Unknown error";
+    const code = (error as { code?: string }).code ?? "CLI_ERROR";
+    const nextSteps = guidanceForError(error);
     if (json) {
       console.log(
         JSON.stringify({
           error: message,
-          code: (error as { code?: string }).code ?? "CLI_ERROR",
+          code,
+          ...(nextSteps.commands.length > 0
+            ? {
+                nextSteps: nextSteps.commands,
+                ...(nextSteps.note ? { note: nextSteps.note } : {}),
+              }
+            : {}),
         }),
       );
     } else {
       ui.error(message);
+      ui.nextSteps(nextSteps);
     }
     process.exitCode = exitCode(error);
   })

@@ -17,6 +17,7 @@ autolink check               Check native-library wiring
 autolink codegen             Run native-module codegen
 ota doctor                   Check native OTA host integration
 build create                 Build, sign and upload an artifact
+build all                    Build Android and iOS on macOS
 build list/status             Inspect build jobs
 build cancel/retry            Manage a build job
 run / logs                   Install an artifact or stream native logs
@@ -38,6 +39,12 @@ init` and `docker compose up -d`.
 performs the real native build and signature verification, keeps the UUID-named
 artifact locally, and skips only the Cloudflare R2 transfer. Android builds are
 allowed on Linux, macOS and Windows; iOS builds are allowed only on macOS.
+
+`lynxship build --platform all` creates and runs both native builds
+concurrently after producing one shared Lynx bundle. Each platform has an
+independent job, progress stream and artifact. A real local all-platform build
+requires macOS, an Android host and an iOS Xcode host; Windows and Linux remain
+valid for Android-only builds.
 
 ## Tokens
 
@@ -89,18 +96,35 @@ are red, and neutral compiler output uses the primary text color. The event
 classifier stays in the presentation layer; build execution only emits plain
 messages.
 
-Event prefixes are intentionally text-based (`[CMD]`, `[STEP]`, `[OK]`,
-`[WARN]`, `[ERROR]`, `[LOG]`) so they remain readable in CMD, PowerShell,
-Unix terminals and CI logs without depending on emoji glyph support.
+Event markers are intentionally text-based so they remain readable in CMD,
+PowerShell, Unix terminals and CI logs without depending on emoji glyph
+support. The journal uses `➜` for commands, `-` for steps, `◆` for successful
+checkpoints, `!` for warnings, `x` for errors and `│` only for technical log
+output. Bracketed event labels are not printed because the marker already
+defines the event type. Consecutive log lines have one small blank line
+between them to keep the vertical rail visually breathable; steps and errors
+stay compact.
 
 ## TTY, CI and JSON
 
 - Decorations are enabled only on an interactive TTY.
 - `--json`, `--quiet`, `--no-color`, `--non-interactive`, `CI=1` and `NO_COLOR` disable decorative output as appropriate.
 - Progress bars and spinners never run in CI, JSON or non-TTY output.
-- `--json` emits one stable JSON object on stdout; errors include `error` and `code`.
+- `--json` emits one stable JSON object on stdout; actionable errors include
+  `error`, `code`, `nextSteps` and, when useful, `note`.
 - Unicode icons have ASCII fallbacks.
 - The CLI never prints a shell prompt.
+
+## Actionable errors
+
+The error renderer maps known recoverable conditions to concrete commands. A
+missing Android host, for example, points to `lynxship dev` for Lynx Explorer,
+`lynxship android host init --application-id ...` for a native host, then
+`lynxship doctor` and `lynxship build` for the real APK/AAB path. The same
+contract covers storage, signing, SDK tools, Autolink, Xcode/CocoaPods,
+devices, stores and OTA compatibility. Unknown low-level errors retain their
+original message and receive only safe generic guidance when the cause can be
+recognized without guessing.
 
 ## Dependencies
 

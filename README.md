@@ -347,6 +347,13 @@ install dependencies, create store accounts or generate production keys.
 **doctor** checks Node, lockfiles, project configuration, R2, signing or Xcode,
 and Lynx Autolink. It reports problems but does not rewrite native host files.
 
+Recoverable CLI errors include a `Next steps` section with the commands needed
+to resolve them. For example, a pure Lynx project without an Android host will
+show `lynxship dev` for Lynx Explorer, then
+`lynxship android host init --application-id com.example.myapp` for a real
+APK/AAB, followed by `lynxship doctor` and `lynxship build`. With `--json`, the
+same commands are returned in the `nextSteps` array for CI automation.
+
 ### Local Lynx development
 
 ```bash
@@ -393,11 +400,19 @@ download, activation, fallback and rollback.
 ```bash
 lynxship build --project-dir <path> --platform android --profile production
 lynxship build create --project-dir <path> --platform android --profile production
+lynxship build --project-dir <path> --platform all --profile production
+lynxship build all --project-dir <path> --profile production
 ```
 
 Creates a build job and, when a supported local host exists, executes the real
 Rspeedy, Gradle or Xcode pipeline. The artifact is verified, assigned a UUID
 filename and uploaded to R2.
+
+`--platform all` (or `lynxship build all`) builds Android and iOS concurrently
+after one shared Lynx bundle step. Each native pipeline has its own build job,
+progress events and UUID-named artifact. A real local all-platform build
+requires macOS with both native hosts; Windows and Linux remain supported for
+Android-only builds.
 
 ```bash
 lynxship build list
