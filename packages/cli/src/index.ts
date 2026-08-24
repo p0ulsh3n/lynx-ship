@@ -710,28 +710,39 @@ async function main(): Promise<void> {
     const autolinkForPlatform = autolink[doctorPlatform];
     const lockfile = await findLockfile(root);
     const nodeMajor = Number(process.versions.node.split(".")[0]);
+    const nodeSupported = nodeMajor >= 22;
+    const nodeRecommended = nodeMajor % 2 === 0;
     const checks = [
       {
         name: "node",
-        ok: nodeMajor >= 22 && nodeMajor % 2 === 0,
-        value:
-          nodeMajor >= 22 && nodeMajor % 2 === 0
+        ok: nodeSupported,
+        status: !nodeSupported
+          ? ("fail" as const)
+          : nodeRecommended
+            ? ("pass" as const)
+            : ("warn" as const),
+        value: !nodeSupported
+          ? `${process.version} · fix: use Node 24 LTS`
+          : nodeRecommended
             ? process.version
-            : `${process.version} · fix: use Node 24 LTS`,
+            : `${process.version} · recommended: Node 24 LTS`,
       },
       {
         name: "package-manager-lockfile",
         ok: Boolean(lockfile),
+        status: lockfile ? "pass" : "fail",
         value: lockfile ?? "missing · fix: npm install or pnpm install",
       },
       {
         name: "lynxship.json",
-        ok: await exists(join(root, "lynxship.json")),
+        ok: config.projectId !== undefined,
+        status: config.projectId ? "pass" : "fail",
         value: config.projectId ? "found" : "missing · fix: lynxship init",
       },
       {
         name: "cloudflare-r2",
         ok: configuration.r2,
+        status: configuration.r2 ? "pass" : "fail",
         value: configuration.r2
           ? "configured"
           : "run lynxship storage configure",
@@ -742,6 +753,13 @@ async function main(): Promise<void> {
           doctorPlatform === "android"
             ? configuration.android
             : process.platform === "darwin" && hasIosHost(root),
+        status: (
+          doctorPlatform === "android"
+            ? configuration.android
+            : process.platform === "darwin" && hasIosHost(root)
+        )
+          ? "pass"
+          : "fail",
         value:
           doctorPlatform === "android"
             ? configuration.android
@@ -754,22 +772,36 @@ async function main(): Promise<void> {
       {
         name: `lynx-autolink-${doctorPlatform}`,
         ok: autolinkForPlatform.ready,
+        status: autolinkForPlatform.ready ? "pass" : "fail",
         value: autolinkForPlatform.ready
           ? autolinkForPlatform.reason
           : `${autolinkForPlatform.reason} · fix: install the native plugin, then run autolink codegen`,
       },
     ];
-    const result = { ok: checks.every((check) => check.ok), checks };
-    if (!result.ok) ui.warn("One or more environment checks need attention");
+    const result = {
+      ok: checks.every((check) => check.status !== "fail"),
+      checks,
+    };
+    const hasWarnings = checks.some((check) => check.status === "warn");
+    if (!result.ok) ui.warn("One or more environment checks failed");
+    else if (hasWarnings)
+      ui.warn("Environment is usable, but one recommendation needs attention");
     printValue(result, {
       title: "Doctor result",
       rows: checks.map((check) => ({
         label: check.name,
-        value: `${check.ok ? "pass" : "fail"} · ${check.value}`,
-        valueColor: check.ok ? "green" : "red",
+        value: `${check.status} · ${check.value}`,
+        valueColor:
+          check.status === "pass"
+            ? "green"
+            : check.status === "warn"
+              ? "yellow"
+              : "red",
       })),
       done: result.ok
-        ? "Environment looks ready."
+        ? hasWarnings
+          ? "Environment is usable; review the recommendation when convenient."
+          : "Environment looks ready."
         : "Fix the failed checks before building.",
     });
     return;
