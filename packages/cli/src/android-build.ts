@@ -296,7 +296,9 @@ export async function runRealAndroidBuild(
 
     transitionBuild(job, "building", `Gradle ${artifact.task}`);
     step(`Running real Gradle task ${artifact.task}…`);
-    await runProcess(wrapper, [artifact.task], {
+    const gradleArgs = [artifact.task];
+    if (process.env.CI) gradleArgs.push("--stacktrace");
+    await runProcess(wrapper, gradleArgs, {
       cwd: android,
       env: environment,
       ...processOptions,

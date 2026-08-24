@@ -99,10 +99,24 @@ export function runProcess(
     child.once("exit", (code, signal) => {
       if (pending.trim() && !options.quiet) options.onOutput?.(pending.trim());
       if (code === 0) return resolve();
-      const lastLine = output.trim().split(/\r?\n/).at(-1) ?? "";
+      const outputLines = output
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const failureIndex = outputLines.findIndex((line) =>
+        /(?:FAILURE:|What went wrong:|Execution failed for task)/.test(line),
+      );
+      const recentOutput = (
+        failureIndex >= 0
+          ? outputLines.slice(failureIndex)
+          : outputLines.slice(-24)
+      )
+        .slice(-24)
+        .join("\n");
       reject(
         new Error(
-          `${command} ${args.join(" ")} failed (${signal ?? `exit ${code}`})${lastLine ? `: ${lastLine}` : ""}`,
+          `${command} ${args.join(" ")} failed (${signal ?? `exit ${code}`})${recentOutput ? `:\n${recentOutput}` : ""}`,
         ),
       );
     });
