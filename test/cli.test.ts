@@ -47,6 +47,10 @@ test("TypeScript CLI init/build/update use persistent local state", async () => 
   };
   const init = await runCli(cwd, ["init", "--non-interactive", "--json"]);
   assert.equal(init.code, 0);
+  const projectConfig = JSON.parse(
+    await readFile(join(cwd, "lynxship.json"), "utf8"),
+  ) as { projectId: string };
+  assert.match(projectConfig.projectId, /^[0-9a-f-]{36}$/);
   const realBuild = await runCli(
     cwd,
     ["build", "--platform", "android", "--json"],
@@ -75,6 +79,26 @@ test("TypeScript CLI init/build/update use persistent local state", async () => 
   );
   assert.equal(update.code, 0);
   assert.equal(JSON.parse(update.stdout).manifest.platform, "android");
+  const releaseId = JSON.parse(update.stdout).id as string;
+  const rollback = await runCli(
+    cwd,
+    [
+      "update",
+      "rollback",
+      "--platform",
+      "android",
+      "--release-id",
+      releaseId,
+      "--reason",
+      "Verify local rollback",
+      "--local",
+      "--json",
+    ],
+    environment,
+  );
+  assert.equal(rollback.code, 0);
+  assert.equal(JSON.parse(rollback.stdout).status, "rolled_back");
+  assert.equal(JSON.parse(rollback.stdout).release.id, releaseId);
   assert.match(
     await readFile(join(cwd, ".lynxship", "state.json"), "utf8"),
     /releases/,

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { access, mkdir, readFile, unlink } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, unlink } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { prompt, secret } from "./prompt.js";
@@ -158,6 +158,7 @@ async function generateAndroidKeystore(
   const path = join(directory, "android-release.jks");
   try {
     await access(path);
+    await chmod(path, 0o600).catch(() => undefined);
     throw new Error(
       `An Android keystore already exists at ${path}. Configure it explicitly or remove it before generating a new one.`,
     );
@@ -213,6 +214,7 @@ async function generateAndroidKeystore(
     await unlink(path).catch(() => undefined);
     throw error;
   }
+  await chmod(path, 0o600).catch(() => undefined);
   return { path, password };
 }
 

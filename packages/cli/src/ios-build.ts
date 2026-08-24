@@ -15,6 +15,7 @@ import {
 interface IosBuildOptions {
   root: string;
   profile: BuildProfile;
+  uploadArtifacts?: boolean;
   quiet?: boolean;
   onEvent?: (message: string) => void;
   onProgress?: (value?: number, label?: string) => void;
@@ -116,7 +117,8 @@ export async function runRealIosBuild(
     options.onProgress?.(progress, message);
   };
   try {
-    await loadR2(options.root);
+    const uploadArtifacts = options.uploadArtifacts ?? true;
+    if (uploadArtifacts) await loadR2(options.root);
     await mkdir(archiveDirectory, { recursive: true });
     transitionBuild(job, "uploading_source", "iOS source prepared");
     step("Building Lynx bundle with Rspeedy…", 5);
@@ -196,39 +198,51 @@ export async function runRealIosBuild(
     await copyFile(exportedIpa, artifactPath);
     const content = await readFile(artifactPath);
     const hash = sha256(content);
-    const uploaded = await uploadR2Artifact(
-      options.root,
-      job.projectId,
-      job.id,
-      artifactPath,
-      "application/octet-stream",
-      undefined,
-      {
-        onProgress: (uploadedBytes, totalBytes) => {
-          const transfer = totalBytes === 0 ? 1 : uploadedBytes / totalBytes;
-          options.onProgress?.(
-            80 + transfer * 19,
-            `Uploading signed artifact to Cloudflare R2… ${Math.round(transfer * 10000) / 100}%`,
-          );
-        },
-      },
-    );
-    assert(
-      uploaded.hash === hash,
-      "BUILD_ARTIFACT_HASH",
-      "R2 artifact hash mismatch",
-    );
     job.attempts += 1;
-    job.artifact = {
-      name: artifactName,
-      hash,
-      path: artifactPath,
-      key: uploaded.key,
-      size: uploaded.size,
-      contentType: uploaded.contentType,
-      url: uploaded.url,
-      expiresAt: uploaded.expiresAt,
-    };
+    if (!uploadArtifacts) {
+      step("Artifact collected locally; R2 upload skipped", 100);
+      job.artifact = {
+        name: artifactName,
+        hash,
+        path: artifactPath,
+        size: content.length,
+        contentType: "application/octet-stream",
+      };
+    } else {
+      step("Uploading signed artifact to Cloudflare R2…", 80);
+      const uploaded = await uploadR2Artifact(
+        options.root,
+        job.projectId,
+        job.id,
+        artifactPath,
+        "application/octet-stream",
+        undefined,
+        {
+          onProgress: (uploadedBytes, totalBytes) => {
+            const transfer = totalBytes === 0 ? 1 : uploadedBytes / totalBytes;
+            options.onProgress?.(
+              80 + transfer * 19,
+              `Uploading signed artifact to Cloudflare R2… ${Math.round(transfer * 10000) / 100}%`,
+            );
+          },
+        },
+      );
+      assert(
+        uploaded.hash === hash,
+        "BUILD_ARTIFACT_HASH",
+        "R2 artifact hash mismatch",
+      );
+      job.artifact = {
+        name: artifactName,
+        hash,
+        path: artifactPath,
+        key: uploaded.key,
+        size: uploaded.size,
+        contentType: uploaded.contentType,
+        url: uploaded.url,
+        expiresAt: uploaded.expiresAt,
+      };
+    }
     step(`Artifact ready: ${artifactName}`, 100);
     return transitionBuild(job, "success", "real iOS artifact created");
   } catch (error) {

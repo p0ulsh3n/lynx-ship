@@ -86,6 +86,55 @@ test("Fastify auth enforces scopes while health remains public", async (t) => {
   assert.equal(response.statusCode, 201);
 });
 
+test("OTA API rolls a channel back to a compatible release", async (t) => {
+  const server = createApi();
+  t.after(() => server.close());
+  const publish = async (message: string) =>
+    server.inject({
+      method: "POST",
+      url: "/v1/ota/releases",
+      payload: {
+        projectId: "project",
+        organizationId: "organization",
+        channel: "production",
+        platform: "android",
+        runtimeVersion: "runtime-1",
+        assets: [
+          {
+            path: "main.lynx.bundle",
+            hash: sha256(message),
+            size: message.length,
+            url: "https://example.r2.dev/bundle",
+          },
+        ],
+        message,
+      },
+    });
+  const first = await publish("known-good");
+  const second = await publish("bad-release");
+  assert.equal(first.statusCode, 201);
+  assert.equal(second.statusCode, 201);
+  const firstId = (first.json() as { id: string }).id;
+  const rollback = await server.inject({
+    method: "POST",
+    url: "/v1/ota/rollback",
+    payload: {
+      projectId: "project",
+      channel: "production",
+      platform: "android",
+      releaseId: firstId,
+      reason: "Stop the bad release in production",
+    },
+  });
+  assert.equal(rollback.statusCode, 200);
+  assert.equal((rollback.json() as { id: string }).id, firstId);
+  const check = await server.inject({
+    method: "GET",
+    url: "/v1/ota/check?projectId=project&channel=production&platform=android&runtimeVersion=runtime-1&installationId=device-1",
+  });
+  assert.equal((check.json() as { id: string }).id, firstId);
+});
+
 test("Fastify rate limiting returns 429 with a retry hint", async (t) => {
   const server = createApi({
     rateLimiter: new FixedWindowRateLimiter({ limit: 1, windowMs: 10_000 }),

@@ -18,6 +18,14 @@ export interface OtaPublishRequest {
   policyApprovalId?: string | null;
 }
 
+export interface OtaRollbackRequest {
+  projectId: string;
+  channel: string;
+  platform: "android" | "ios";
+  releaseId: string;
+  reason: string;
+}
+
 interface RemoteOptions {
   apiUrl?: string;
   token?: string;
@@ -58,6 +66,11 @@ export async function ensureRemoteTarget(
   config: LynxShipConfig,
   state: RemoteCliState,
 ): Promise<{ organizationId: string; projectId: string }> {
+  const projectName = config.projectId;
+  if (!projectName)
+    throw new Error(
+      "lynxship.json must contain projectId. Run `lynxship init` first.",
+    );
   const options = {
     apiUrl: config.cli?.apiUrl,
     token: config.cli?.token ?? process.env.LYNXSHIP_TOKEN,
@@ -73,7 +86,7 @@ export async function ensureRemoteTarget(
       {
         method: "POST",
         body: JSON.stringify({
-          name: `${config.projectId ?? "local_project"} organization`,
+          name: `${projectName} organization`,
           ownerUserId: "cli",
         }),
       },
@@ -88,7 +101,6 @@ export async function ensureRemoteTarget(
       options,
       `/v1/projects?organizationId=${encodeURIComponent(organizationId)}`,
     );
-    const projectName = config.projectId ?? "local_project";
     projectId = projects.find((project) => project.name === projectName)?.id;
     if (!projectId) {
       const project = await request<{ id: string }>(options, "/v1/projects", {
@@ -177,6 +189,25 @@ export async function publishOtaRelease(
       token: config.cli?.token ?? process.env.LYNXSHIP_TOKEN,
     },
     "/v1/ota/releases",
+    {
+      method: "POST",
+      body: JSON.stringify({ ...input, ...target }),
+    },
+  );
+}
+
+export async function rollbackOtaRelease(
+  config: LynxShipConfig,
+  state: RemoteCliState,
+  input: OtaRollbackRequest,
+): Promise<unknown> {
+  const target = await ensureRemoteTarget(config, state);
+  return request(
+    {
+      apiUrl: config.cli?.apiUrl,
+      token: config.cli?.token ?? process.env.LYNXSHIP_TOKEN,
+    },
+    "/v1/ota/rollback",
     {
       method: "POST",
       body: JSON.stringify({ ...input, ...target }),

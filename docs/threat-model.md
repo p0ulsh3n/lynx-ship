@@ -5,8 +5,9 @@ Trust boundaries are explicit: CLI and workers are untrusted clients; the contro
 The CLI stores Cloudflare R2, Android signing, Google Play and App Store
 Connect secrets in a global LynxShip credential store. On Windows the values
 are protected with Windows DPAPI; on macOS they are stored in the macOS
-Keychain. Linux uses an owner-only file
-with mode 600 and should use CI or a native Secret Service integration for
+Keychain; on Linux the CLI uses the freedesktop Secret Service through
+`secret-tool` when available. Headless Linux without a Secret Service uses an
+owner-only mode-600 fallback file and should use CI secret injection for
 unattended production environments. Secrets are entered without terminal echo,
 are never written to `lynxship.json`, and are not sent to the control plane.
 Google Play uploads use short-lived OAuth access tokens derived from the

@@ -135,6 +135,7 @@ export class OtaService {
     projectId: string;
     channel: string;
     releaseId: string;
+    platform?: Platform;
     reason?: string;
   }): Release {
     const channel = this.channels.get(`${input.projectId}:${input.channel}`);
@@ -149,13 +150,19 @@ export class OtaService {
       "RELEASE_CHANNEL_MISMATCH",
       "Release does not belong to channel",
     );
+    const release = this.get(input.releaseId);
+    assert(
+      !input.platform || release.manifest.platform === input.platform,
+      "RELEASE_PLATFORM_MISMATCH",
+      "Release does not belong to the requested platform",
+    );
     channel.current = input.releaseId;
     channel.lastRollback = {
       releaseId: input.releaseId,
       reason: input.reason ?? "",
       at: new Date().toISOString(),
     };
-    return this.get(input.releaseId);
+    return release;
   }
 
   pause(id: string): Release {

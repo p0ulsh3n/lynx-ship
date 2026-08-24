@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 export function globalLynxShipDirectory(): string {
   if (process.env.LYNXSHIP_CONFIG_DIR) return process.env.LYNXSHIP_CONFIG_DIR;
@@ -12,5 +12,11 @@ export function globalLynxShipDirectory(): string {
     );
   if (process.platform === "darwin")
     return join(home, "Library", "Application Support", "LynxShip");
-  return join(process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "lynxship");
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME;
+  return join(
+    xdgConfigHome && isAbsolute(xdgConfigHome)
+      ? xdgConfigHome
+      : join(home, ".config"),
+    "lynxship",
+  );
 }

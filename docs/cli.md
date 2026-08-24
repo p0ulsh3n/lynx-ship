@@ -2,6 +2,43 @@
 
 The CLI follows the terminal-first LynxShip identity defined in the normative specification. The visual layer is isolated in `packages/cli/src/ui` so command logic does not duplicate formatting rules.
 
+## Command surface
+
+The published executable is installed with `npm install --global
+@lynxship/cli` and is invoked as `lynxship`. The complete operational surface
+is:
+
+```text
+init                         Initialize or link a project
+doctor                       Check the local toolchain and project
+dev / preview                Run or preview Rspeedy
+inspect / profile            Inspect or profile Rspeedy configuration
+autolink check               Check native-library wiring
+autolink codegen             Run native-module codegen
+ota doctor                   Check native OTA host integration
+build create                 Build, sign and upload an artifact
+build list/status             Inspect build jobs
+build cancel/retry            Manage a build job
+run / logs                   Install an artifact or stream native logs
+submit                       Submit the latest successful artifact
+update                       Publish a signed OTA release
+update rollback              Restore a previous compatible OTA release
+self-host init               Create protected self-host credentials
+storage configure            Configure Cloudflare R2
+android configure            Configure Android signing
+store configure              Configure Google Play or App Store Connect
+```
+
+`rollback` remains a compatibility alias for `update rollback`. Use
+`lynxship --help` for the option-level reference. Installing the npm package
+does not start Docker; self-host operators explicitly run `lynxship self-host
+init` and `docker compose up -d`.
+
+`lynxship build --no-upload` is intended for CI toolchain verification. It
+performs the real native build and signature verification, keeps the UUID-named
+artifact locally, and skips only the Cloudflare R2 transfer. Android builds are
+allowed on Linux, macOS and Windows; iOS builds are allowed only on macOS.
+
 ## Tokens
 
 The LynxShip brand follows the Lynx community CLI visual language: a pink to

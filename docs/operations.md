@@ -6,7 +6,16 @@
 
 ## Bad OTA release
 
-Pause the release, inspect telemetry, select a known-good release from the channel history, execute an explicit rollback, then verify update checks on a canary installation. Keep the signed release and audit record; do not delete evidence during incident response.
+Pause the release, inspect telemetry, select a known-good release from the channel history, then execute:
+
+```bash
+lynxship update rollback --platform android --release-id <release-id> --reason "Incident reference and remediation"
+```
+
+Use `--platform ios` for an iOS channel. Verify update checks on a canary
+installation. Keep the signed release and audit record; rollback changes the
+channel pointer and does not delete evidence or the R2 artifact. Native code
+changes still require a new binary build and store submission.
 
 ## Queue outage
 

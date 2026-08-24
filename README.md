@@ -17,10 +17,10 @@ Play, App Store Connect and signed OTA updates in one explicit workflow.
 
 ### Install the published CLI
 
-After the packages are published to npm, install the CLI globally:
+Install the published CLI from npm:
 
 ```bash
-npm install --global @lynxship/cli
+npm install --global @lynxship/cli@latest
 lynxship --help
 ```
 
@@ -30,45 +30,33 @@ Or run it without a global install:
 npx @lynxship/cli doctor --project-dir ./my-lynx-app
 ```
 
-### Publish the workspace packages
-
-The CLI depends on five public `@lynxship/*` runtime packages. From a
-maintainer checkout, publish the public dependency graph together so pnpm
-rewrites `workspace:*` to the released versions in each npm tarball:
-
-```bash
-npm login
-pnpm --filter @lynxship/cli... build
-pnpm publish -r --access public
-```
-
-Run `npm pack --dry-run` in `packages/cli` before publishing to inspect the
-CLI tarball. Do not publish until the `lynxship` npm scope belongs to your
-account or organization and the package metadata has been reviewed.
-
-### Install and verify
-
-```bash
-pnpm install
-pnpm check
-pnpm verify
-```
-
 ### Initialize a LynxJS project
 
 ```bash
-node packages/cli/dist/index.js init --project-dir ./examples/lynx-android-demo
+cd ./my-lynx-app
+lynxship init
 ```
 
 The build command also initializes **lynxship.json** automatically when it
-detects a LynxJS project that has not been initialized yet.
+detects a LynxJS project that has not been initialized yet. Initialization
+generates one stable UUID project ID for that project.
+
+For CI toolchain verification without Cloudflare credentials, pass
+`--no-upload`. LynxShip still performs the real bundle, Gradle and signing
+steps, stores the UUID-named artifact in `.lynxship/artifacts`, and skips only
+the R2 upload:
+
+```bash
+lynxship build --project-dir ./my-lynx-app --platform android \
+  --profile production --no-upload --non-interactive
+```
 
 ### Configure the machine once
 
 ```bash
-node packages/cli/dist/index.js storage configure
-node packages/cli/dist/index.js android configure
-node packages/cli/dist/index.js store configure --platform android
+lynxship storage configure
+lynxship android configure
+lynxship store configure --platform android
 ```
 
 The first command connects LynxShip to Cloudflare R2. The second loads an
@@ -79,7 +67,8 @@ hidden and credentials are stored outside the project configuration.
 ### Build a signed Android artifact
 
 ```bash
-node packages/cli/dist/index.js build --project-dir ./examples/lynx-android-demo --platform android --profile production
+lynxship doctor --platform android
+lynxship build --platform android --profile production
 ```
 
 The real Android path is:
@@ -98,21 +87,27 @@ Rspeedy bundle
 ### Submit the latest successful build
 
 ```bash
-docker compose up -d
+lynxship submit --platform android --latest
 ```
 
-PowerShell:
+When using the self-hosted control plane, start it separately and point the
+CLI at it:
 
 ```powershell
-$env:LYNXSHIP_API_URL = "http://127.0.0.1:8787"; node packages/cli/dist/index.js submit --project-dir ./examples/lynx-android-demo --platform android --latest
+$env:LYNXSHIP_API_URL = "http://127.0.0.1:8787"
+lynxship submit --platform android --latest
 ```
 
 Unix shells:
 
 ```bash
 export LYNXSHIP_API_URL=http://127.0.0.1:8787
-node packages/cli/dist/index.js submit --project-dir ./examples/lynx-android-demo --platform android --latest
+lynxship submit --platform android --latest
 ```
+
+Installing the npm package does not start Docker and does not create cloud
+resources automatically. Run `lynxship self-host init` and `docker compose up
+-d` only when you operate the self-hosted API yourself.
 
 ## What LynxShip does
 
@@ -138,8 +133,11 @@ node packages/cli/dist/index.js submit --project-dir ./examples/lynx-android-dem
 - Node.js 24 LTS is the recommended production baseline.
 - pnpm 11, as pinned in **package.json**.
 - Git.
-- Android builds: JDK 17, Android SDK, **adb**, Android build tools and the
-  project's Gradle wrapper.
+- Android builds on Windows, macOS or Linux: JDK 17, Android SDK command-line
+  tools, **adb**, Android platform/build tools and an executable project Gradle
+  wrapper (`chmod +x android/gradlew` on Linux/macOS when needed).
+- macOS can build both Android and iOS. Windows and Linux can build Android;
+  iOS builds are restricted to macOS with Xcode.
 - iOS builds: macOS, Xcode, Xcode command-line tools and valid Apple signing
   configuration.
 - Store submission: a Google Play Developer account or an App Store Connect
@@ -148,7 +146,7 @@ node packages/cli/dist/index.js submit --project-dir ./examples/lynx-android-dem
 ```bash
 node --version
 pnpm --version
-node packages/cli/dist/index.js doctor --project-dir ./examples/lynx-android-demo --platform android
+lynxship doctor --project-dir ./examples/lynx-android-demo --platform android
 ```
 
 ## Configuration
@@ -160,7 +158,7 @@ policy, such as build profiles and OTA settings:
 
 ```json
 {
-  "projectId": "local_project",
+  "projectId": "<generated-uuid>",
   "build": {
     "production": {
       "android": {
@@ -175,6 +173,10 @@ policy, such as build profiles and OTA settings:
 }
 ```
 
+`lynxship init` generates a stable UUID for `projectId`. It is the identity
+of this project in LynxShip; it is not a placeholder and must not change after
+the project has been connected to remote builds or OTA releases.
+
 Credentials are not placed in this file. Project state, local artifacts and
 build history are kept in the ignored **.lynxship/** directory.
 
@@ -188,14 +190,16 @@ macOS    ~/Library/Application Support/LynxShip
 Linux    $XDG_CONFIG_HOME/lynxship or ~/.config/lynxship
 ```
 
-The storage layer uses Windows DPAPI, macOS Keychain and an owner-only Linux
-fallback file. CI should inject credentials through a secret manager instead
-of copying a developer profile.
+The storage layer uses Windows DPAPI, macOS Keychain, and the Linux Secret
+Service (`secret-tool`) when available. Headless Linux machines without a
+Secret Service use an owner-only mode-600 fallback file; CI should inject
+credentials through a secret manager or environment variables instead of
+copying a developer profile.
 
 ### Cloudflare R2
 
 ```bash
-node packages/cli/dist/index.js storage configure
+lynxship storage configure
 ```
 
 The wizard asks for the Cloudflare account ID, R2 bucket, R2 access key ID,
@@ -206,7 +210,7 @@ API token. MinIO is not required by the current Docker profile.
 ### Android signing
 
 ```bash
-node packages/cli/dist/index.js android configure
+lynxship android configure
 ```
 
 An existing **.jks** or **.keystore** is supported. This preserves the signing
@@ -217,7 +221,7 @@ keystore for store releases.
 ### Google Play submission
 
 ```bash
-node packages/cli/dist/index.js store configure --platform android
+lynxship store configure --platform android
 ```
 
 The wizard accepts a Google service-account JSON file, Android application ID,
@@ -229,7 +233,7 @@ be committed.
 ### App Store Connect submission
 
 ```bash
-node packages/cli/dist/index.js store configure --platform ios
+lynxship store configure --platform ios
 ```
 
 The wizard accepts the App Store Connect API key ID, issuer ID, bundle ID,
@@ -244,7 +248,7 @@ and the profile's export options.
 
 ```text
 init -> doctor -> autolink check -> ota doctor -> build
-     -> run / logs -> submit -> update
+     -> run / logs -> submit -> update -> rollback (if needed)
 ```
 
 ## Command reference
@@ -296,6 +300,7 @@ download, activation, fallback and rollback.
 
 ```bash
 lynxship build --project-dir <path> --platform android --profile production
+lynxship build create --project-dir <path> --platform android --profile production
 ```
 
 Creates a build job and, when a supported local host exists, executes the real
@@ -362,6 +367,22 @@ For an iOS deployment requiring an approval identifier:
 lynxship update --platform ios --bundle dist/main.lynx.bundle --policy-approval-id <approval-id>
 ```
 
+To restore a previously published compatible OTA release without deleting
+the bad release or its artifact:
+
+```bash
+lynxship update rollback --platform android --release-id <release-id> --reason "Stop checkout crash"
+lynxship update rollback --platform ios --release-id <release-id> --reason "Restore known-good release"
+```
+
+The rollback changes the selected channel's current release and records the
+reason in the control plane. It does not undo native Android/iOS code; native
+changes still require a new binary build and store submission. Use
+`--local` only to exercise the local contract path.
+
+`lynxship rollback ...` is retained as a compatibility alias for
+`lynxship update rollback ...`.
+
 ### Self-hosting and setup
 
 ```bash
@@ -406,6 +427,20 @@ identify the workspace or project, scheme and export options:
 The iOS path runs Rspeedy, the optional bundle script, Xcode archive and
 export, signature verification, UUID artifact naming and R2 upload. Windows
 and Linux fail clearly instead of creating a fake iOS artifact.
+
+## Linux notes
+
+Linux is a supported host for the Android CLI path and for the self-hosted
+control plane. Android's official `sdkmanager` supports headless Linux
+installations, and Gradle recommends using the project's Gradle Wrapper with
+JDK 17 or newer. Install the SDK command-line tools, accept the licenses, and
+make sure `ANDROID_HOME` (or `ANDROID_SDK_ROOT`) and `JAVA_HOME` are available
+to the shell that runs LynxShip.
+
+References: [Android command-line tools](https://developer.android.com/tools/sdkmanager),
+[Android environment variables](https://developer.android.com/tools/variables),
+[Gradle installation](https://docs.gradle.org/current/userguide/installation.html),
+and [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/).
 
 ## Docker control plane
 
@@ -484,6 +519,28 @@ git status --short --ignored
 Never commit credentials, service-account JSON files, App Store Connect
 private keys, keystores, passwords, secret **.env** files, **.lynxship/**,
 generated artifacts, personal SDK paths or presigned R2 URLs.
+
+## Publishing the CLI (maintainers)
+
+End users install the already-published package with npm; they do not need
+this repository. Maintainers publishing a new version should run:
+
+```bash
+npm login
+pnpm --filter @lynxship/cli... build
+cd packages/cli
+npm pack --dry-run
+cd ../..
+pnpm publish -r --access public
+```
+
+The `@lynxship` scope must belong to the publishing npm account or
+organization. Verify the published result with:
+
+```bash
+npm view @lynxship/cli version
+npm install --global @lynxship/cli@latest
+```
 
 ## Repository layout
 

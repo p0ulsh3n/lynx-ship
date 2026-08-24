@@ -282,6 +282,13 @@ export function createApi(options: ApiOptions = {}): FastifyInstance {
     await persist();
     return reply.code(201).send(release);
   });
+  server.post("/v1/ota/rollback", async (request) => {
+    const release = app.ota.rollback(
+      request.body as Parameters<LynxShipApp["ota"]["rollback"]>[0],
+    );
+    await persist();
+    return release;
+  });
   server.get("/v1/ota/public-key", async () => ({
     keyId: app.ota.signingKey.keyId,
     publicKey: app.ota.signingKey.publicKey,

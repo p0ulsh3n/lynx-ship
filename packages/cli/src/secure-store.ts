@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { join, resolve } from "node:path";
 import { assert } from "@lynxship/contracts";
 import { globalLynxShipDirectory } from "./paths.js";
+import { commandExists } from "./process-runner.js";
 
 export interface StoredCredentials {
   r2?: {
@@ -34,12 +35,17 @@ export interface StoredCredentials {
 export function credentialStorageDescription(): string {
   if (process.platform === "win32") return "Windows DPAPI encrypted";
   if (process.platform === "darwin") return "macOS Keychain";
+  if (commandExists("secret-tool")) return "Linux Secret Service";
   return "owner-only credential file";
 }
 
 interface EncryptedCredentials {
   version: 1;
-  platform: "windows-dpapi" | "macos-keychain" | "file-mode-600";
+  platform:
+    | "windows-dpapi"
+    | "macos-keychain"
+    | "linux-secret-service"
+    | "file-mode-600";
   values: Record<string, string>;
 }
 
@@ -119,8 +125,33 @@ function runSecurity(args: string[]): Promise<string> {
   });
 }
 
+function runSecretTool(args: string[], input = ""): Promise<string> {
+  return new Promise((resolveOutput, reject) => {
+    const child = spawn("secret-tool", args, {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let output = "";
+    let error = "";
+    child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr.on("data", (chunk: Buffer) => (error += chunk.toString()));
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code !== 0)
+        reject(
+          new Error(error.trim() || "Linux Secret Service operation failed"),
+        );
+      else resolveOutput(output.trim());
+    });
+    child.stdin.end(input);
+  });
+}
+
 function keychainAccount(root: string, global: boolean): string {
   return global ? "global" : `project:${resolve(root)}`;
+}
+
+function secretServiceAccount(root: string, global: boolean): string {
+  return keychainAccount(root, global);
 }
 
 function credentialValues(
@@ -260,6 +291,64 @@ async function saveKeychain(
   await unlink(credentialFile(root, global)).catch(() => undefined);
 }
 
+async function readSecretService(
+  root: string,
+  global: boolean,
+): Promise<StoredCredentials | undefined> {
+  if (process.platform !== "linux" || !commandExists("secret-tool"))
+    return undefined;
+  try {
+    const value = await runSecretTool([
+      "lookup",
+      "application",
+      keychainService,
+      "account",
+      secretServiceAccount(root, global),
+    ]);
+    if (!value) return undefined;
+    const stored = JSON.parse(value) as EncryptedCredentials;
+    assert(
+      stored.version === 1 && stored.platform === "linux-secret-service",
+      "CLI_CREDENTIALS_INVALID",
+      "Unsupported LynxShip Linux Secret Service record",
+    );
+    return credentialsFromValues(stored.values);
+  } catch {
+    return undefined;
+  }
+}
+
+async function saveSecretService(
+  root: string,
+  credentials: StoredCredentials,
+  global: boolean,
+): Promise<boolean> {
+  if (process.platform !== "linux" || !commandExists("secret-tool"))
+    return false;
+  const record: EncryptedCredentials = {
+    version: 1,
+    platform: "linux-secret-service",
+    values: credentialValues(credentials),
+  };
+  try {
+    await runSecretTool(
+      [
+        "store",
+        "--label",
+        "LynxShip CLI credentials",
+        "application",
+        keychainService,
+        "account",
+        secretServiceAccount(root, global),
+      ],
+      JSON.stringify(record),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function mergeCredentials(
   global: StoredCredentials,
   project: StoredCredentials,
@@ -281,6 +370,7 @@ async function readCredentialFile(file: string): Promise<StoredCredentials> {
       encrypted.version === 1 &&
         (encrypted.platform === "windows-dpapi" ||
           encrypted.platform === "macos-keychain" ||
+          encrypted.platform === "linux-secret-service" ||
           encrypted.platform === "file-mode-600"),
       "CLI_CREDENTIALS_INVALID",
       "Unsupported LynxShip credential store",
@@ -310,12 +400,26 @@ async function readCredentialStore(
     const keychain = await readKeychain(root, global);
     if (keychain) return keychain;
   }
+  if (process.platform === "linux") {
+    const secretService = await readSecretService(root, global);
+    if (secretService) return secretService;
+  }
   const legacy = await readCredentialFile(credentialFile(root, global));
   if (
     process.platform === "darwin" &&
     (legacy.r2 !== undefined || legacy.android !== undefined)
   ) {
     await saveKeychain(root, legacy, global).catch(() => undefined);
+  }
+  if (
+    process.platform === "linux" &&
+    (legacy.r2 !== undefined ||
+      legacy.android !== undefined ||
+      legacy.googlePlay !== undefined ||
+      legacy.appStoreConnect !== undefined) &&
+    (await saveSecretService(root, legacy, global))
+  ) {
+    await unlink(credentialFile(root, global)).catch(() => undefined);
   }
   return legacy;
 }
@@ -339,6 +443,12 @@ export async function saveCredentials(
   if (process.platform === "darwin") {
     await saveKeychain(root, credentials, global);
     return;
+  }
+  if (process.platform === "linux") {
+    if (await saveSecretService(root, credentials, global)) {
+      await unlink(credentialFile(root, global)).catch(() => undefined);
+      return;
+    }
   }
   const values = credentialValues(credentials);
   const encrypted: EncryptedCredentials = {

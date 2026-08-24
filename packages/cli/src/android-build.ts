@@ -7,7 +7,7 @@ import {
   readdir,
 } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { constants as fsConstants, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { assert, sha256, type BuildJob } from "@lynxship/contracts";
 import { transitionBuild } from "@lynxship/build-orchestrator";
@@ -17,6 +17,7 @@ import { loadCredentials } from "./secure-store.js";
 import { nativeArtifactName } from "./artifact-name.js";
 import {
   commandExists,
+  executableExists,
   packageManagerScriptCommand,
   runProcess,
 } from "./process-runner.js";
@@ -24,6 +25,7 @@ import {
 interface AndroidBuildOptions {
   root: string;
   profile: BuildProfile;
+  uploadArtifacts?: boolean;
   quiet?: boolean;
   onStep?: (message: string) => void;
   onEvent?: (message: string) => void;
@@ -115,7 +117,7 @@ function androidTool(name: string): string | undefined {
       .sort()
       .reverse()
       .map((version) => join(sdk, "build-tools", version, executable))
-      .find((candidate) => existsSync(candidate));
+      .find((candidate) => executableExists(candidate));
   } catch {
     return undefined;
   }
@@ -161,15 +163,22 @@ function artifactDetails(
 }
 
 export function hasAndroidHost(root: string): Promise<boolean> {
+  if (!isSupportedAndroidPlatform()) return Promise.resolve(false);
+  const wrapper = join(
+    root,
+    "android",
+    process.platform === "win32" ? "gradlew.bat" : "gradlew",
+  );
   return access(
-    join(
-      root,
-      "android",
-      process.platform === "win32" ? "gradlew.bat" : "gradlew",
-    ),
+    wrapper,
+    process.platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK,
   )
     .then(() => true)
     .catch(() => false);
+}
+
+export function isSupportedAndroidPlatform(): boolean {
+  return ["linux", "darwin", "win32"].includes(process.platform);
 }
 
 /**
@@ -223,10 +232,16 @@ export async function runRealAndroidBuild(
   job: BuildJob,
   options: AndroidBuildOptions,
 ): Promise<BuildJob> {
+  assert(
+    isSupportedAndroidPlatform(),
+    "ANDROID_PLATFORM_UNSUPPORTED",
+    "Android builds are supported only on Linux, macOS and Windows.",
+  );
   const android = join(options.root, "android");
   const wrapper = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
   const artifact = artifactDetails(options.root, options.profile);
-  await loadR2(options.root);
+  const uploadArtifacts = options.uploadArtifacts ?? true;
+  if (uploadArtifacts) await loadR2(options.root);
   const environment = {
     ...(await signingEnvironment(options.root)),
     LYNXSHIP_RUNTIME_VERSION:
@@ -303,41 +318,53 @@ export async function runRealAndroidBuild(
     const content = await readFile(artifactPath);
     const hash = sha256(content);
     job.attempts += 1;
-    step("Uploading signed artifact to Cloudflare R2…", 80);
-    const uploaded = await uploadR2Artifact(
-      options.root,
-      job.projectId,
-      job.id,
-      artifactPath,
-      artifactName.endsWith(".aab")
-        ? "application/octet-stream"
-        : "application/vnd.android.package-archive",
-      undefined,
-      {
-        onProgress: (uploadedBytes, totalBytes) => {
-          const transfer = totalBytes === 0 ? 1 : uploadedBytes / totalBytes;
-          options.onProgress?.(
-            80 + transfer * 19,
-            `Uploading signed artifact to Cloudflare R2… ${Math.round(transfer * 10000) / 100}%`,
-          );
+    const contentType = artifactName.endsWith(".aab")
+      ? "application/octet-stream"
+      : "application/vnd.android.package-archive";
+    if (!uploadArtifacts) {
+      step("Artifact collected locally; R2 upload skipped", 100);
+      job.artifact = {
+        name: artifactName,
+        hash,
+        path: artifactPath,
+        size: content.length,
+        contentType,
+      };
+    } else {
+      step("Uploading signed artifact to Cloudflare R2…", 80);
+      const uploaded = await uploadR2Artifact(
+        options.root,
+        job.projectId,
+        job.id,
+        artifactPath,
+        contentType,
+        undefined,
+        {
+          onProgress: (uploadedBytes, totalBytes) => {
+            const transfer = totalBytes === 0 ? 1 : uploadedBytes / totalBytes;
+            options.onProgress?.(
+              80 + transfer * 19,
+              `Uploading signed artifact to Cloudflare R2… ${Math.round(transfer * 10000) / 100}%`,
+            );
+          },
         },
-      },
-    );
-    assert(
-      uploaded.hash === hash,
-      "BUILD_ARTIFACT_HASH",
-      "R2 artifact hash mismatch",
-    );
-    job.artifact = {
-      name: artifactName,
-      hash,
-      path: artifactPath,
-      key: uploaded.key,
-      size: uploaded.size,
-      contentType: uploaded.contentType,
-      url: uploaded.url,
-      expiresAt: uploaded.expiresAt,
-    };
+      );
+      assert(
+        uploaded.hash === hash,
+        "BUILD_ARTIFACT_HASH",
+        "R2 artifact hash mismatch",
+      );
+      job.artifact = {
+        name: artifactName,
+        hash,
+        path: artifactPath,
+        key: uploaded.key,
+        size: uploaded.size,
+        contentType: uploaded.contentType,
+        url: uploaded.url,
+        expiresAt: uploaded.expiresAt,
+      };
+    }
     step(`Artifact ready: ${artifactName}`, 100);
     return transitionBuild(job, "success", "real Android artifact created");
   } catch (error) {

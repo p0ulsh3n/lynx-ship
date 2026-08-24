@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   GetObjectCommand,
@@ -214,6 +214,7 @@ export async function writeR2Config(
     encoding: "utf8",
     mode: 0o600,
   });
+  await chmod(file, 0o600).catch(() => undefined);
   await access(file);
 }
 

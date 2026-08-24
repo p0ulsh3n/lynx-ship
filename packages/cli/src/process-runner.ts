@@ -1,6 +1,5 @@
-import { execFileSync } from "node:child_process";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export interface ProcessOptions {
@@ -125,11 +124,40 @@ export async function runRspeedy(
 }
 
 export function commandExists(command: string): boolean {
+  const pathValue = process.env.PATH ?? "";
+  const pathEntries = pathValue.split(process.platform === "win32" ? ";" : ":");
+  const hasPathSeparator = /[\\/]/.test(command);
+  const candidates = hasPathSeparator
+    ? [command]
+    : pathEntries.flatMap((directory) => {
+        if (!directory) return [];
+        if (process.platform !== "win32") return [join(directory, command)];
+        const extensions = (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
+          .split(";")
+          .filter(Boolean);
+        return [
+          join(directory, command),
+          ...extensions.map((extension) =>
+            join(directory, `${command}${extension}`),
+          ),
+        ];
+      });
+  const mode = process.platform === "win32" ? constants.F_OK : constants.X_OK;
+  return candidates.some((candidate) => {
+    try {
+      accessSync(candidate, mode);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+export function executableExists(file: string): boolean {
   try {
-    execFileSync(
-      process.platform === "win32" ? "where.exe" : "which",
-      [command],
-      { stdio: "ignore" },
+    accessSync(
+      file,
+      process.platform === "win32" ? constants.F_OK : constants.X_OK,
     );
     return true;
   } catch {

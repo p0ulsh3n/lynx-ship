@@ -19,7 +19,7 @@ export function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <SettingRow label="Project ID" value="local_project" />
+          <SettingRow label="Project ID" value="Not initialized" />
           <SettingRow label="OTA policy" value="Fingerprint runtime" />
           <SettingRow label="Production channel" value="production" />
         </CardContent>

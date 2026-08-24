@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { BuildOrchestrator } from "@lynxship/build-orchestrator";
 import { JsonRepository } from "@lynxship/db";
@@ -23,8 +23,17 @@ import {
   GooglePlayApiProvider,
   SubmissionService,
 } from "@lynxship/submit";
-import { DEFAULT_CONFIG, loadConfig, platformValue } from "./config.js";
-import { hasAndroidHost, runRealAndroidBuild } from "./android-build.js";
+import {
+  DEFAULT_CONFIG,
+  loadConfig,
+  platformValue,
+  type LynxShipConfig,
+} from "./config.js";
+import {
+  hasAndroidHost,
+  isSupportedAndroidPlatform,
+  runRealAndroidBuild,
+} from "./android-build.js";
 import { hasIosHost, runRealIosBuild } from "./ios-build.js";
 import {
   configureAndroid,
@@ -35,6 +44,7 @@ import {
 import {
   fetchOtaPublicKey,
   publishOtaRelease,
+  rollbackOtaRelease,
   submitRealArtifact,
   type RemoteCliState,
 } from "./remote.js";
@@ -81,6 +91,7 @@ interface CliState extends RemoteCliState {
   submissions: SubmissionJob[];
   releases: CliRelease[];
   signingKey: SigningKey | null;
+  lastRollback?: { releaseId: string; reason: string; at: string };
 }
 
 interface View {
@@ -198,7 +209,25 @@ async function readConfigurationStatus(): Promise<{
 
 async function requireOperationalConfiguration(
   platform: Platform,
+  options: { requireR2?: boolean } = {},
 ): Promise<void> {
+  await requireProjectRoot();
+  const status = await readConfigurationStatus();
+  if (options.requireR2 !== false)
+    assert(
+      status.r2,
+      "CLI_R2_REQUIRED",
+      "Cloudflare R2 must be configured first. Run `lynxship storage configure`.",
+    );
+  if (platform !== "android") return;
+  assert(
+    status.android,
+    "BUILD_SIGNING_REQUIRED",
+    "Android signing must be configured first. Run `lynxship android configure` or provide an existing keystore.",
+  );
+}
+
+async function requireR2Configuration(): Promise<void> {
   await requireProjectRoot();
   const status = await readConfigurationStatus();
   assert(
@@ -206,12 +235,15 @@ async function requireOperationalConfiguration(
     "CLI_R2_REQUIRED",
     "Cloudflare R2 must be configured first. Run `lynxship storage configure`.",
   );
-  if (platform !== "android") return;
+}
+
+function configuredProjectId(config: LynxShipConfig): string {
   assert(
-    status.android,
-    "BUILD_SIGNING_REQUIRED",
-    "Android signing must be configured first. Run `lynxship android configure` or provide an existing keystore.",
+    typeof config.projectId === "string" && config.projectId.length > 0,
+    "CLI_PROJECT_ID_REQUIRED",
+    "lynxship.json must contain a generated projectId. Run `lynxship init` for a new project configuration.",
   );
+  return config.projectId;
 }
 
 async function renderConfigurationFooter(): Promise<void> {
@@ -313,6 +345,7 @@ function commandTitle(command: string): string {
       build: "Cloud Build",
       submit: "Store Submission",
       update: "OTA Update",
+      rollback: "OTA Rollback",
       "self-host": "Self-host setup",
       storage: "Cloudflare R2 setup",
       android: "Android signing setup",
@@ -336,18 +369,55 @@ Commands:
   ota doctor              Check native OTA host integration
   run                     Install an artifact on an Android/iOS target
   logs                    Stream Android/iOS native logs
-  build                   Create a local/cloud build job
+  build create            Create a local/cloud build job
+  build list              List build jobs
+  build status <id>       Show one build job
+  build cancel <id>       Cancel a build job
+  build retry <id>        Retry a failed build job
   submit                  Submit the latest successful build
   update                  Upload and publish a signed OTA update
+  update rollback         Roll back an OTA channel to a previous release
+  rollback                Alias for update rollback
   self-host init          Generate local self-host credentials
   storage configure       Configure Cloudflare R2 and encrypted R2 credentials
   android configure       Configure or generate encrypted Android signing credentials
   store configure         Configure Google Play or App Store Connect submission
 
+Build options:
+  --platform <p>          Target android or ios (default: android)
+  --profile <name>        Build profile (default: production)
+  --no-wait               Queue the build without executing it locally
+  --no-upload              Keep the signed artifact local and skip R2 (CI verification)
+  --local                 Use the contract-only build path for tests
+
+Submit options:
+  --platform <p>          Target android or ios (default: android)
+  --latest                Submit the latest successful build
+  --local                 Use the mock submission provider for tests
+
 Update options:
-  --bundle <path[,path]>  Lynx bundle/assets to publish (default: discover dist/*.lynx.bundle)
+  --platform <p>          Target android or ios (default: android)
+  --bundle <path[,path]>  Lynx bundle/assets (default: discover dist/*.lynx.bundle)
+  --message <text>        Release message
   --local                 Create a local contract-only update for tests
   --policy-approval-id    Required for an iOS OTA release
+
+Rollback options:
+  --platform <p>          Target android or ios (default: android)
+  --release-id <id>       Previously published compatible release
+  --reason <text>         Required audit reason for the rollback
+  --local                 Roll back local contract state for tests
+
+Device and diagnostics options:
+  doctor --platform <p>   Check the local toolchain (default: android)
+  autolink check --platform <p>
+                          Check native-library wiring (default: android)
+  ota doctor --platform <p>
+                          Check OTA host integration (default: android)
+  run --artifact <path>   Install a specific APK, IPA or app artifact
+  run --device <id>       Select the Android device or iOS simulator
+  run --simulator         Install an iOS .app with simctl
+  logs --device <id>      Select the device or simulator for native logs
 
 Global options:
   --json                  Emit one stable JSON result/error object
@@ -357,9 +427,10 @@ Global options:
   --non-interactive       Never prompt; fail on missing inputs
   --banner                Show the Braille LynxShip logo in a TTY
   --project-dir <path>    Use a LynxShip project from any working directory
+  --project-id <id>       Project ID used by init
+  --library-dir <path>    Native library directory for autolink codegen
   --simulator             Install an iOS .app on a simulator with simctl
-  doctor --platform <p>   Check Autolink for android or ios (default: android)
-  --local                 Use the mock submission provider for local tests only
+  --help                  Show this complete command reference
 
 Node support: Node 22/24 LTS or Node 26 Current. Use Node 24 LTS for production.`;
 }
@@ -404,7 +475,7 @@ async function initializeProject(): Promise<string> {
   await writeFile(
     file,
     `${JSON.stringify(
-      { ...DEFAULT_CONFIG, projectId: flag("--project-id", "local_project") },
+      { ...DEFAULT_CONFIG, projectId: flag("--project-id") ?? randomUUID() },
       null,
       2,
     )}\n`,
@@ -664,7 +735,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  ui.header(commandTitle(command));
+  ui.header(
+    commandTitle(
+      command === "update" && args[0] === "rollback" ? "rollback" : command,
+    ),
+  );
   ui.debug(`cwd=${root}`);
 
   if (command === "init") {
@@ -683,6 +758,7 @@ async function main(): Promise<void> {
       return;
     }
     await initializeProject();
+    const initializedConfig = await loadConfig(root);
     ui.success("Created lynxship.json");
     printValue(
       { status: "created", file },
@@ -691,7 +767,7 @@ async function main(): Promise<void> {
         rows: [
           {
             label: "Project ID",
-            value: flag("--project-id", "local_project")!,
+            value: initializedConfig.projectId ?? "unassigned",
             valueColor: "purple",
           },
           { label: "Configuration", value: file, valueColor: "muted" },
@@ -709,6 +785,8 @@ async function main(): Promise<void> {
     const autolink = await inspectAutolink(root);
     const autolinkForPlatform = autolink[doctorPlatform];
     const lockfile = await findLockfile(root);
+    const credentialStore = credentialStorageDescription();
+    const nativeCredentialStore = !credentialStore.includes("owner-only");
     const androidHost =
       doctorPlatform === "android" ? await hasAndroidHost(root) : false;
     const nodeMajor = Number(process.versions.node.split(".")[0]);
@@ -740,6 +818,14 @@ async function main(): Promise<void> {
         ok: config.projectId !== undefined,
         status: config.projectId ? "pass" : "fail",
         value: config.projectId ? "found" : "missing · fix: lynxship init",
+      },
+      {
+        name: "credential-store",
+        ok: true,
+        status: nativeCredentialStore ? ("pass" as const) : ("warn" as const),
+        value: nativeCredentialStore
+          ? credentialStore
+          : `${credentialStore} · use CI secret variables or install Linux Secret Service`,
       },
       ...(doctorPlatform === "android"
         ? [
@@ -1106,7 +1192,7 @@ async function main(): Promise<void> {
       const controlPlaneSubmission = candidate.artifact?.path
         ? await submitRealArtifact(config, state, candidate, latest)
         : await submissions.submit({
-            projectId: config.projectId ?? "local_project",
+            projectId: configuredProjectId(config),
             organizationId: "local_org",
             platform,
             artifact: candidate.artifact ?? { hash: `local-${candidate.id}` },
@@ -1180,11 +1266,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (command === "update") {
+  if (command === "update" && args[0] !== "rollback") {
     const config = await loadConfig(root);
     const platform = platformValue(flag("--platform", "android")!);
     await requireOperationalConfiguration(platform);
-    const projectId = config.projectId ?? "local_project";
+    const projectId = configuredProjectId(config);
     const localMode =
       args.includes("--local") || process.env.LYNXSHIP_SUBMIT_MODE === "mock";
     const explicitBundles = flag("--bundle");
@@ -1324,11 +1410,106 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (
+    command === "rollback" ||
+    (command === "update" && args[0] === "rollback")
+  ) {
+    if (command === "update") args.shift();
+    const config = await loadConfig(root);
+    const platform = platformValue(flag("--platform", "android")!);
+    const releaseId = flag("--release-id");
+    const reason = flag("--reason");
+    const channel = config.update?.channel ?? "production";
+    const localMode = args.includes("--local");
+    assert(
+      Boolean(releaseId && releaseId !== "true"),
+      "ROLLBACK_RELEASE_REQUIRED",
+      "Pass the release to restore with `--release-id <id>`.",
+    );
+    assert(
+      Boolean(reason?.trim()) && reason !== "true",
+      "ROLLBACK_REASON_REQUIRED",
+      'Pass an audit reason with `--reason "..."`.',
+    );
+    await requireR2Configuration();
+    const progress = ui.progress("OTA rollback");
+    try {
+      progress.update(10, `Selecting ${releaseId} for ${channel}…`);
+      if (localMode) {
+        const release = state.releases.find(
+          (candidate) =>
+            candidate.id === releaseId &&
+            candidate.manifest.channel === channel &&
+            candidate.manifest.platform === platform,
+        );
+        assert(
+          release,
+          "RELEASE_NOT_FOUND",
+          `Local release ${releaseId} was not found in channel ${channel} for ${platform}.`,
+        );
+        state.lastRollback = {
+          releaseId: release.id,
+          reason: reason!,
+          at: new Date().toISOString(),
+        };
+        await saveState(state, repository, builds, submissions);
+        progress.update(100, "Local OTA channel rolled back");
+        printValue(
+          { status: "rolled_back", release, rollback: state.lastRollback },
+          {
+            title: "OTA rollback",
+            rows: [
+              { label: "Release ID", value: release.id, valueColor: "purple" },
+              { label: "Platform", value: platform, valueColor: "blue" },
+              { label: "Channel", value: channel, valueColor: "orange" },
+              { label: "Reason", value: reason!, valueColor: "muted" },
+            ],
+            done: "Local OTA channel now points to the selected release.",
+          },
+        );
+        return;
+      }
+
+      progress.update(45, "Requesting rollback through LynxShip API…");
+      const release = (await rollbackOtaRelease(config, state, {
+        projectId: configuredProjectId(config),
+        channel,
+        platform,
+        releaseId: releaseId!,
+        reason: reason!,
+      })) as CliRelease;
+      state.lastRollback = {
+        releaseId: release.id,
+        reason: reason!,
+        at: new Date().toISOString(),
+      };
+      await saveState(state, repository, builds, submissions);
+      progress.update(100, "OTA channel rolled back");
+      printValue(
+        { status: "rolled_back", release, rollback: state.lastRollback },
+        {
+          title: "OTA rollback",
+          rows: [
+            { label: "Release ID", value: release.id, valueColor: "purple" },
+            { label: "Platform", value: platform, valueColor: "blue" },
+            { label: "Channel", value: channel, valueColor: "orange" },
+            { label: "Reason", value: reason!, valueColor: "muted" },
+          ],
+          done: "Devices will receive the selected compatible release on their next OTA check.",
+        },
+      );
+    } finally {
+      progress.stop();
+    }
+    return;
+  }
+
   assert(command === "build", "CLI_COMMAND", `Unknown command: ${command}`);
   const subcommand =
     args[0] && !args[0].startsWith("--") ? args.shift() : "create";
   const platform = platformValue(flag("--platform", "android")!);
-  await requireOperationalConfiguration(platform);
+  const skipUpload = args.includes("--no-upload");
+  await requireOperationalConfiguration(platform, { requireR2: !skipUpload });
   if (subcommand === "list") {
     printValue(builds.list());
     return;
@@ -1361,7 +1542,7 @@ async function main(): Promise<void> {
   await requireAutolinkReady(root, platform);
   const runtime = await inspectRuntimeFingerprint(root, platform, config);
   const job = await builds.create({
-    projectId: config.projectId ?? "local_project",
+    projectId: configuredProjectId(config),
     organizationId: "local_org",
     platform,
     profile,
@@ -1374,8 +1555,20 @@ async function main(): Promise<void> {
   try {
     progress.update(undefined, "Preparing build pipeline…");
     if (!args.includes("--no-wait")) {
+      if (
+        platform === "android" &&
+        !isSupportedAndroidPlatform() &&
+        !args.includes("--local")
+      )
+        assert(
+          false,
+          "ANDROID_PLATFORM_UNSUPPORTED",
+          "Android builds are supported only on Linux, macOS and Windows.",
+        );
       const realAndroid =
-        platform === "android" && (await hasAndroidHost(root));
+        platform === "android" &&
+        isSupportedAndroidPlatform() &&
+        (await hasAndroidHost(root));
       const realIos =
         platform === "ios" && hasIosHost(root, config.build?.[profile]);
       if (platform === "ios" && !realIos && !args.includes("--local"))
@@ -1394,6 +1587,7 @@ async function main(): Promise<void> {
         await runRealAndroidBuild(job, {
           root,
           profile: config.build?.[profile] ?? {},
+          uploadArtifacts: !skipUpload,
           quiet: json,
           onEvent: (message) => progress.event(message),
           onProgress: (value, label) => progress.update(value, label),
@@ -1402,6 +1596,7 @@ async function main(): Promise<void> {
         await runRealIosBuild(job, {
           root,
           profile: config.build?.[profile] ?? {},
+          uploadArtifacts: !skipUpload,
           quiet: json,
           onEvent: (message) => progress.event(message),
           onProgress: (value, label) => progress.update(value, label),

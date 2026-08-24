@@ -27,11 +27,11 @@ The package exposes the `lynxship` executable.
 
 ## Requirements
 
-- Node.js 22 LTS or newer; Node.js 24 LTS is the recommended production
-  baseline.
+- Node.js 22 or 24 LTS, or Node.js 26 Current; Node.js 24 LTS is the
+  recommended production baseline.
 - A LynxJS project using Rspeedy.
-- Android builds: JDK 17, Android SDK, `adb`, build tools and the project's
-  Gradle wrapper.
+- Android builds on Windows, macOS or Linux: JDK 17, Android SDK command-line
+  tools, `adb`, build tools and an executable project Gradle wrapper.
 - iOS builds: macOS, Xcode and Xcode command-line tools.
 - Cloudflare R2 credentials for artifact storage.
 
@@ -46,7 +46,10 @@ lynxship store configure --platform android
 ```
 
 Secret inputs are hidden. Credentials are stored outside the project using the
-OS-specific secure storage path. They are never written to `lynxship.json`.
+OS-specific secure storage path. Linux uses Secret Service when `secret-tool`
+is available and otherwise uses a mode-600 owner-only fallback suitable for
+headless development; CI should use its secret manager or environment
+variables. Credentials are never written to `lynxship.json`.
 
 The project itself is initialized automatically by `build` when needed, or
 explicitly with:
@@ -54,6 +57,10 @@ explicitly with:
 ```bash
 lynxship init --project-dir ./my-lynx-app
 ```
+
+`init` writes a stable UUID `projectId` to `lynxship.json`. Each project gets
+its own generated ID; credentials remain machine-global and are not written
+to the project file.
 
 ## Build a signed Android artifact
 
@@ -77,6 +84,15 @@ Rspeedy bundle
   -> expiring download URL and QR code
 ```
 
+CI can verify the complete local build without R2 credentials by adding
+`--no-upload`. The signed artifact remains in `.lynxship/artifacts` and the
+R2 transfer is the only skipped stage.
+
+```bash
+lynxship build --platform android --profile production --no-upload \
+  --non-interactive
+```
+
 Progress percentages are shown only when LynxShip has a real measurement. Long
 Rspeedy, Gradle and Xcode operations remain visible in the event journal until
 their completion checkpoint is known; no timer-based percentage is invented.
@@ -88,9 +104,15 @@ init                 Initialize or link a project
 doctor               Check the local toolchain and project
 dev                  Run the Rspeedy development server
 preview              Preview the production bundle locally
-build                Build, sign and upload an artifact
+build create         Build, sign and upload an artifact
+build list           List build jobs
+build status <id>    Inspect one build job
+build cancel <id>    Cancel a build job
+build retry <id>     Retry a failed build job
 submit               Submit the latest successful artifact
 update               Publish a signed OTA update
+update rollback      Roll back an OTA channel to a previous release
+rollback             Compatibility alias for update rollback
 run                  Install an artifact on a target
 logs                 Stream native logs
 autolink check       Check Lynx native-library wiring
@@ -105,11 +127,33 @@ Use `lynxship --help` or `lynxship <command> --help` for the complete option
 list. `--json`, `--quiet`, `--no-color` and `--non-interactive` are available
 for automation.
 
+## OTA rollback
+
+```bash
+lynxship update rollback \
+  --platform android \
+  --release-id <release-id> \
+  --reason "Restore known-good release"
+```
+
+Rollback changes the current release pointer for the configured channel. It
+does not delete the release or its R2 artifact, and it does not undo native
+code. Native changes still require a new binary build and store submission.
+
 ## OTA safety
 
 OTA updates are for JavaScript and assets compatible with the installed native
 runtime. If native code, permissions, autolinked modules or other runtime
 inputs change, LynxShip blocks the OTA and requires a new signed binary build.
+
+## Linux host support
+
+Android builds run on Windows, macOS and Linux, with device install/logs
+through `adb` and the self-hosted control plane. Install the Android
+command-line tools with `sdkmanager`, accept the required licenses, set
+`ANDROID_HOME` or `ANDROID_SDK_ROOT` and `JAVA_HOME`, and ensure
+`android/gradlew` is executable. macOS can build both Android and iOS; Windows
+and Linux can build Android only.
 
 ## Package layout
 

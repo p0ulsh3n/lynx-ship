@@ -15,8 +15,8 @@ import { formatDate } from "../../lib/utils";
 
 export function UpdatesPage() {
   const query = useQuery({
-    queryKey: ["releases", "local_project"],
-    queryFn: () => api.releases("local_project"),
+    queryKey: ["releases", "uninitialized"],
+    queryFn: () => api.releases("uninitialized"),
   });
   if (query.isPending) return <LoadingBlock />;
   if (query.isError) return <ErrorBlock message={query.error.message} />;

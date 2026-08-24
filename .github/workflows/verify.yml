@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     name: Node ${{ matrix.node-version }}
     strategy:
       fail-fast: false
@@ -47,6 +47,92 @@ jobs:
 
           exit 1
       - run: pnpm verify
+
+  android:
+    runs-on: ubuntu-24.04
+    name: Real Android release build
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/setup@v2
+        with:
+          version: 11.19.0
+          runtime: node@24
+          install: false
+          cache: false
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: >-
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
+      - name: Install dependencies
+        shell: bash
+        run: |
+          pnpm config set registry https://registry.npmjs.org/
+          pnpm config set network-concurrency 8
+          pnpm config set fetch-retries 5
+          pnpm config set fetch-timeout 120000
+          pnpm install --frozen-lockfile --reporter=append-only
+      - name: Build LynxShip CLI
+        run: pnpm --filter @lynxship/cli build
+      - name: Generate ephemeral Android signing key
+        shell: bash
+        run: |
+          keystore="$RUNNER_TEMP/lynxship-ci-release.jks"
+          keytool -genkeypair \
+            -noprompt \
+            -keystore "$keystore" \
+            -storepass "lynxship-ci-store" \
+            -keypass "lynxship-ci-key" \
+            -alias lynxship-ci \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 3650 \
+            -dname "CN=LynxShip CI, OU=Tests, O=LynxShip, L=CI, ST=CI, C=US"
+          chmod 600 "$keystore"
+          {
+            echo "LYNXSHIP_KEYSTORE_PATH=$keystore"
+            echo "LYNXSHIP_KEY_ALIAS=lynxship-ci"
+            echo "LYNXSHIP_KEYSTORE_PASSWORD=lynxship-ci-store"
+            echo "LYNXSHIP_KEY_PASSWORD=lynxship-ci-key"
+          } >> "$GITHUB_ENV"
+      - name: Build and verify the Android APK through LynxShip
+        shell: bash
+        run: |
+          chmod +x examples/lynx-android-demo/android/gradlew
+          output="$RUNNER_TEMP/lynxship-android-build.json"
+          set +e
+          node packages/cli/dist/index.js build \
+            --project-dir examples/lynx-android-demo \
+            --platform android \
+            --profile production \
+            --no-upload \
+            --non-interactive \
+            --json > "$output"
+          status=$?
+          set -e
+          cat "$output"
+          test "$status" -eq 0
+          BUILD_OUTPUT="$output" node <<'NODE'
+          const fs = require("node:fs");
+          const result = JSON.parse(fs.readFileSync(process.env.BUILD_OUTPUT, "utf8"));
+          if (result.state !== "success") {
+            throw new Error(`Android build did not succeed: ${result.state}`);
+          }
+          if (!result.artifact?.path || !fs.existsSync(result.artifact.path)) {
+            throw new Error("LynxShip did not produce a local Android artifact");
+          }
+          if (!result.artifact.path.endsWith(".apk")) {
+            throw new Error(`Expected an APK, received ${result.artifact.path}`);
+          }
+          NODE
 
   ios:
     runs-on: macos-15
