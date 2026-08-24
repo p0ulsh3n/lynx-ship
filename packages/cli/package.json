@@ -1,9 +1,18 @@
 {
   "name": "@lynxship/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Build, sign, store, submit and update LynxJS applications from the terminal.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/p0ulsh3n/lynx-ship/issues"
+  },
+  "homepage": "https://github.com/p0ulsh3n/lynx-ship/tree/main/packages/cli#readme",
   "keywords": [
     "lynxjs",
     "lynx",
