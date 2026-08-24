@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TokenManager } from "@lynxship/auth";
@@ -12,8 +12,18 @@ import {
 import { sha256 } from "@lynxship/contracts";
 
 test("Fastify API exposes health and build contract", async (t) => {
-  const server = createApi();
-  t.after(() => server.close());
+  const dashboardRoot = await mkdtemp(join(tmpdir(), "lynxship-dashboard-"));
+  const dashboardDist = join(dashboardRoot, "packages", "dashboard", "dist");
+  await mkdir(dashboardDist, { recursive: true });
+  await writeFile(
+    join(dashboardDist, "index.html"),
+    "<!doctype html><html><body>LynxShip test dashboard</body></html>",
+  );
+  const server = createApi({ dashboardRoot });
+  t.after(async () => {
+    await server.close();
+    await rm(dashboardRoot, { recursive: true, force: true });
+  });
   const health = await server.inject({ method: "GET", url: "/health" });
   assert.equal(health.statusCode, 200);
   assert.deepEqual(health.json(), { status: "ok" });
