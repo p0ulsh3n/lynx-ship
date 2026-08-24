@@ -1,0 +1,3 @@
+interface:
+  display_name: "LynxShip CLI Release"
+  short_description: "Secure CLI builds, OTA, stores, and CI guidance"

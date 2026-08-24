@@ -39,7 +39,14 @@ export function hasIosHost(root: string, profile?: BuildProfile): boolean {
 
 function findProject(root: string, profile: BuildProfile): string {
   const configured = profile.ios?.workspace ?? profile.ios?.project;
-  if (configured) return resolve(root, configured);
+  if (configured) {
+    const configuredPath = resolve(root, configured);
+    if (configuredPath.endsWith(".xcodeproj")) {
+      const workspace = configuredPath.replace(/\.xcodeproj$/, ".xcworkspace");
+      if (existsSync(workspace)) return workspace;
+    }
+    return configuredPath;
+  }
   for (const directory of ["ios", "macos"]) {
     try {
       const candidate = readdirSync(join(root, directory)).find(
@@ -52,6 +59,27 @@ function findProject(root: string, profile: BuildProfile): string {
     }
   }
   throw new Error("No Xcode workspace or project found under ios/ or macos/");
+}
+
+async function installCocoaPods(
+  root: string,
+  quiet: boolean | undefined,
+  onEvent: ((message: string) => void) | undefined,
+): Promise<void> {
+  const iosDirectory = join(root, "ios");
+  const podfile = join(iosDirectory, "Podfile");
+  if (!existsSync(podfile)) return;
+  assert(
+    commandExists("pod"),
+    "IOS_COCOAPODS_REQUIRED",
+    "CocoaPods was not found. Install CocoaPods on macOS, then rerun the build.",
+  );
+  onEvent?.("Installing iOS CocoaPods dependencies…");
+  await runProcess("pod", ["install"], {
+    cwd: iosDirectory,
+    quiet,
+    onOutput: onEvent,
+  });
 }
 
 async function findIpa(directory: string): Promise<string> {
@@ -86,6 +114,8 @@ export async function runRealIosBuild(
     "IOS_PROJECT_REQUIRED",
     `Configured Xcode project was not found: ${project}`,
   );
+  await installCocoaPods(options.root, options.quiet, options.onEvent);
+  const resolvedProject = findProject(options.root, options.profile);
   const ios = options.profile.ios ?? {};
   const scheme = ios.scheme;
   assert(
@@ -105,7 +135,7 @@ export async function runRealIosBuild(
     "IOS_EXPORT_OPTIONS_REQUIRED",
     `Export options file was not found: ${exportOptionsPath}`,
   );
-  const projectFlag = project.endsWith(".xcworkspace")
+  const projectFlag = resolvedProject.endsWith(".xcworkspace")
     ? "-workspace"
     : "-project";
   const configuration = ios.configuration ?? "Release";
@@ -145,7 +175,7 @@ export async function runRealIosBuild(
       "xcodebuild",
       [
         projectFlag,
-        project,
+        resolvedProject,
         "-scheme",
         scheme,
         "-configuration",

@@ -13,6 +13,31 @@ Play, App Store Connect and signed OTA updates in one explicit workflow.
 
 [Documentation](docs/) · [CLI design system](docs/cli.md) · [Operations](docs/operations.md) · [Compatibility](docs/compatibility.md)
 
+## Contributor skills
+
+Repository skills are versioned under [`.agents/skills`](.agents/skills). They
+are part of the engineering contract for contributors and coding agents:
+
+- [`lynxship-lynx-engineering`](.agents/skills/lynxship-lynx-engineering/SKILL.md)
+  covers current Lynx/Rspeedy APIs, native hosts, Autolink, modules, DevTool
+  and runtime verification.
+- [`lynxship-cli-release`](.agents/skills/lynxship-cli-release/SKILL.md)
+  covers CLI commands, build state, credentials, R2, signing, OTA, store
+  submission, CI and npm release verification.
+- [`lynxship-platform-engineering`](.agents/skills/lynxship-platform-engineering/SKILL.md)
+  covers the API, contracts, auth, tenants, PostgreSQL, Redis queues, R2,
+  workers, dashboard, telemetry, webhooks and platform security.
+
+Before changing a framework-facing integration, the relevant skill's
+source-policy reference must be checked against the current official docs,
+installed packages and upstream release source.
+
+Skills are versioned engineering instructions, not live documentation and
+cannot guarantee future compatibility by themselves. Their source policies
+require an official-docs and lockfile review whenever a framework, provider or
+runtime version changes. A scheduled link audit catches dead sources; it does
+not replace semantic migration review.
+
 ## Quick start
 
 ### Install the published CLI
@@ -218,6 +243,47 @@ identity of an application migrated from another framework. Leaving the path
 empty creates a development keystore; use a company-controlled production
 keystore for store releases.
 
+### Create an Android host for a pure Lynx project
+
+If the project contains only the Rspeedy bundle, create the native host
+explicitly:
+
+```bash
+lynxship android host init --application-id com.example.myapp
+```
+
+The command refuses to overwrite an existing `android/` directory. It creates
+a minimal Android Gradle application using Lynx's official embedding APIs,
+including `LynxEnv`, `LynxView`, a template provider and the Gradle wrapper.
+Use the real application ID when migrating an existing app; the generated
+`com.example.*` value is suitable only as a development default. The template
+does not generate store certificates, custom permissions, native modules or
+OTA provider logic; those are application-specific and must be integrated
+explicitly.
+
+### Create an iOS host for a pure Lynx project
+
+On macOS, a pure Rspeedy project can receive the same native host bootstrap:
+
+```bash
+lynxship ios host init --bundle-identifier com.example.myapp
+```
+
+This command never overwrites an existing `ios/` directory. It creates an
+official Lynx CocoaPods/Xcode host with `LynxEnv`, `LynxView`, the Swift bundle
+provider, `Podfile`, `ExportOptions.plist` and the bundle synchronization
+script. If `lynxship.json` already exists, the generated project, scheme and
+bundle paths are added to its production profile.
+
+```bash
+lynxship doctor --platform ios
+lynxship build --platform ios --profile production
+```
+
+The first real build installs CocoaPods dependencies automatically. Xcode,
+CocoaPods and real Apple signing credentials are still required for a signed
+IPA; LynxShip never invents Apple certificates or provisioning profiles.
+
 At build time, LynxShip applies those machine credentials through a temporary
 Gradle init script. It does not rewrite `build.gradle`, `build.gradle.kts`,
 `settings.gradle` or any other project file. For standard Android Gradle Plugin
@@ -294,6 +360,18 @@ lynxship profile --project-dir <path>
 - **preview** previews the production bundle locally.
 - **inspect** inspects Rspeedy/Rspack configuration.
 - **profile** runs a build with Rspack profiling enabled.
+
+`lynxship dev` is intentionally available even when the project has no
+`android/` or `ios/` directory. It starts the official Rspeedy development
+server; scan its QR code with Lynx Explorer to see the screen on a device and
+receive live source updates. This is the correct workflow for a pure
+`create-rspeedy` project.
+
+An APK/AAB is a different workflow. Lynx's production integration requires a
+native Android host that initializes Lynx, creates a `LynxView`, provides a
+bundle/resource loader and owns the Android Gradle project. LynxShip builds and
+signs that host when it exists; it does not silently invent native application
+code during `build`.
 
 ### Native Lynx integration
 
@@ -422,6 +500,17 @@ successful after the first screen and roll back after repeated failures.
 
 iOS production builds run only on macOS with Xcode. A production profile must
 identify the workspace or project, scheme and export options:
+
+For a pure Rspeedy project, generate that host and profile wiring with:
+
+```bash
+lynxship ios host init --bundle-identifier com.example.myapp
+```
+
+The generated host follows Lynx's official CocoaPods integration and the CLI
+runs `pod install` before archiving. Apple certificates, provisioning
+profiles, a Developer team and App Store Connect credentials remain required
+for a signed or submitted IPA.
 
 ```json
 {

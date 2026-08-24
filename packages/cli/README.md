@@ -117,7 +117,7 @@ unverified artifact.
 ```text
 init                 Initialize or link a project
 doctor               Check the local toolchain and project
-dev                  Run the Rspeedy development server
+dev                  Run Rspeedy dev with Lynx Explorer QR/HMR
 preview              Preview the production bundle locally
 build create         Build, sign and upload an artifact
 build list           List build jobs
@@ -133,7 +133,8 @@ logs                 Stream native logs
 autolink check       Check Lynx native-library wiring
 autolink codegen     Run native-module codegen
 ota doctor           Check native OTA host integration
-storage configure    Configure Cloudflare R2
+storage configure   Configure Cloudflare R2
+android host init   Create a minimal official Lynx Android host
 android configure   Configure Android signing
 store configure      Configure store submission credentials
 ```
@@ -169,6 +170,51 @@ command-line tools with `sdkmanager`, accept the required licenses, set
 `ANDROID_HOME` or `ANDROID_SDK_ROOT` and `JAVA_HOME`, and ensure
 `android/gradlew` is executable. macOS can build both Android and iOS; Windows
 and Linux can build Android only.
+
+## Pure Lynx projects and Lynx Explorer
+
+A standard Rspeedy project can be developed without a native Android host:
+
+```bash
+lynxship dev --project-dir ./my-lynx-app
+```
+
+Rspeedy serves the development bundle and prints the QR code. Scan it with the
+official Lynx Explorer app; edits to the Lynx source are then reflected live.
+This is the supported path for projects containing `src/` and `lynx.config.*`
+but no `android/` directory.
+
+Production APK/AAB builds require a native Android host. The host is the
+Android application that initializes Lynx, creates `LynxView`, loads the bundle
+and contains the Gradle wrapper. `lynxship build` detects that requirement and
+fails clearly when `android/gradlew` is absent; `--local` only tests LynxShip's
+contract state machine and never fabricates an APK.
+
+To create a minimal host for a pure project:
+
+```bash
+lynxship android host init --application-id com.example.myapp
+```
+
+This command never overwrites an existing `android/` directory. It creates a
+real Gradle application with the official Lynx Android dependencies,
+`LynxEnv`, `LynxView`, a bundle loader and a Gradle wrapper. Replace the example
+application ID before a store release and add any project-specific native
+modules, permissions, services and OTA integration explicitly.
+
+For a pure project that targets iOS, create the native Xcode/CocoaPods host
+with:
+
+```bash
+lynxship ios host init --bundle-identifier com.example.myapp
+```
+
+The command refuses to overwrite an existing `ios/` directory and creates a
+Swift host based on Lynx's official integration shape: `LynxEnv`, `LynxView`,
+`LynxTemplateProvider`, `Podfile`, `ExportOptions.plist` and a bundle sync
+script. On macOS, `lynxship build --platform ios` installs CocoaPods before
+archiving. Xcode, CocoaPods and real Apple signing credentials are still
+required for a signed IPA; the CLI never fabricates them.
 
 ## Package layout
 

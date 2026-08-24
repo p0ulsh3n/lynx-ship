@@ -1,0 +1,42 @@
+source 'https://cdn.cocoapods.org/'
+
+platform :ios, '10.0'
+
+target 'Hello-Lynx' do
+  pod 'Lynx', '4.0.0', :subspecs => [
+    'Framework',
+  ]
+
+  pod 'PrimJS', '4.0.0', :subspecs => ['quickjs', 'napi']
+
+  # integrate image-service, log-service, and http-service
+  pod 'LynxService', '4.0.0', :subspecs => [
+      'Image',
+      'Log',
+      'Http',
+  ]
+
+  # ImageService dependencies:
+  pod 'SDWebImage','5.15.5'
+  pod 'SDWebImageWebPCoder', '0.11.0'
+
+  # XElement
+  pod 'XElement', '4.0.0'
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+      ['OTHER_CPLUSPLUSFLAGS', 'OTHER_CFLAGS'].each do |key|
+        flags = config.build_settings[key] || ['$(inherited)']
+        config.build_settings[key] = Array(flags) + [
+          '-Wno-error',
+          '-Wno-c99-designator',
+          '-Wno-deprecated-declarations',
+          '-Wno-deprecated-implementations',
+        ]
+      end
+    end
+  end
+end

@@ -2,7 +2,7 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { BuildOrchestrator } from "@lynxship/build-orchestrator";
 import { JsonRepository } from "@lynxship/db";
 import {
@@ -34,6 +34,11 @@ import {
   isSupportedAndroidPlatform,
   runRealAndroidBuild,
 } from "./android-build.js";
+import {
+  initializeAndroidHost,
+  suggestedAndroidApplicationId,
+} from "./android-host.js";
+import { initializeIosHost, suggestedIosBundleIdentifier } from "./ios-host.js";
 import { hasIosHost, runRealIosBuild } from "./ios-build.js";
 import {
   configureAndroid,
@@ -62,6 +67,7 @@ import {
 } from "./runtime-fingerprint.js";
 import { inspectOtaHost } from "./ota-doctor.js";
 import { otaAssetName, otaAssetPaths } from "./ota-assets.js";
+import { prompt } from "./prompt.js";
 import {
   commandExists,
   packageManagerCommand,
@@ -131,6 +137,19 @@ const root = findProjectRoot(process.cwd());
 function flag(name: string, fallback: string | null = null): string | null {
   const index = args.indexOf(name);
   return index >= 0 ? (args[index + 1] ?? "true") : fallback;
+}
+
+async function assertInteractivePrompt(
+  label: string,
+  fallback: string,
+  optionName: string,
+): Promise<string> {
+  assert(
+    ui.interactive,
+    "CLI_INTERACTIVE_REQUIRED",
+    `Pass ${label.toLowerCase()} with ${optionName} in non-interactive mode.`,
+  );
+  return prompt(label, fallback);
 }
 
 function printValue(value: unknown, view?: View): void {
@@ -360,7 +379,7 @@ function helpText(): string {
 Commands:
   init                    Initialize or link a LynxShip project
   doctor                  Check the local toolchain and project
-  dev                     Run the project's Rspeedy development server
+  dev                     Run Rspeedy dev with Lynx Explorer QR/HMR
   preview                 Preview the production Lynx bundle locally
   inspect                 Inspect Rspeedy/Rspack configuration
   profile                 Build with Rspack profiling enabled
@@ -380,6 +399,8 @@ Commands:
   rollback                Alias for update rollback
   self-host init          Generate local self-host credentials
   storage configure       Configure Cloudflare R2 and encrypted R2 credentials
+  android host init       Create a minimal official Lynx Android host
+  ios host init           Create a minimal official Lynx iOS/Xcode host
   android configure       Configure or generate encrypted Android signing credentials
   store configure         Configure Google Play or App Store Connect submission
 
@@ -428,6 +449,8 @@ Global options:
   --banner                Show the Braille LynxShip logo in a TTY
   --project-dir <path>    Use a LynxShip project from any working directory
   --project-id <id>       Project ID used by init
+  --application-id <id>   Android package/application ID for host init
+  --bundle-identifier <id> iOS bundle identifier for host init
   --library-dir <path>    Native library directory for autolink codegen
   --simulator             Install an iOS .app on a simulator with simctl
   --help                  Show this complete command reference
@@ -534,6 +557,11 @@ async function runRspeedyCommand(
   await initializeBuildProject();
   const forwarded = forwardedToolArgs(args);
   ui.info(`Running local Rspeedy ${subcommand}…`);
+  if (subcommand === "dev") {
+    ui.info(
+      "Lynx Explorer mode: no Android or iOS native host is required. Scan the QR code printed by Rspeedy; source changes reload automatically.",
+    );
+  }
   await runRspeedy(root, subcommand, forwarded, {
     env: environment,
     quiet: json,
@@ -1066,14 +1094,118 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "ios") {
+    const subcommand = args.shift() ?? "host";
+    assert(
+      subcommand === "host" && (args.shift() ?? "init") === "init",
+      "CLI_IOS_HOST_COMMAND",
+      "Use `lynxship ios host init` to create an iOS host.",
+    );
+    await initializeBuildProject();
+    const suggestedId = suggestedIosBundleIdentifier(root);
+    const bundleIdentifier =
+      flag("--bundle-identifier") ??
+      (await assertInteractivePrompt(
+        "iOS bundle identifier",
+        suggestedId,
+        "--bundle-identifier",
+      ));
+    const result = await initializeIosHost(root, {
+      bundleIdentifier,
+      appName: basename(root),
+    });
+    ui.success(`iOS host created: ${result.directory}`);
+    printValue(
+      {
+        status: "created",
+        platform: "ios",
+        directory: result.directory,
+        bundleIdentifier: result.bundleIdentifier,
+        project: result.project,
+        scheme: result.scheme,
+        configUpdated: result.configUpdated,
+      },
+      {
+        title: "iOS host",
+        rows: [
+          {
+            label: "Bundle identifier",
+            value: result.bundleIdentifier,
+            valueColor: "blue",
+          },
+          {
+            label: "Xcode project",
+            value: result.project,
+            valueColor: "green",
+          },
+          { label: "Scheme", value: result.scheme, valueColor: "purple" },
+          {
+            label: "CocoaPods",
+            value: "Run pod install on macOS before the first build",
+            valueColor: "yellow",
+          },
+        ],
+        done: "iOS host is ready. Run lynxship doctor --platform ios on macOS.",
+      },
+    );
+    return;
+  }
+
   if (command === "android") {
+    const subcommand = args.shift() ?? "configure";
+    if (subcommand === "host") {
+      assert(
+        (args.shift() ?? "init") === "init",
+        "CLI_ANDROID_HOST_COMMAND",
+        "Use `lynxship android host init` to create an Android host.",
+      );
+      await initializeBuildProject();
+      const suggestedId = suggestedAndroidApplicationId(root);
+      const applicationId =
+        flag("--application-id") ??
+        (await assertInteractivePrompt(
+          "Android application ID",
+          suggestedId,
+          "--application-id",
+        ));
+      const result = await initializeAndroidHost(root, {
+        applicationId,
+        appName: basename(root),
+      });
+      ui.success(`Android host created: ${result.directory}`);
+      printValue(
+        {
+          status: "created",
+          platform: "android",
+          directory: result.directory,
+          applicationId: result.applicationId,
+        },
+        {
+          title: "Android host",
+          rows: [
+            {
+              label: "Application ID",
+              value: result.applicationId,
+              valueColor: "blue",
+            },
+            {
+              label: "Gradle wrapper",
+              value: join(result.directory, "gradlew"),
+              valueColor: "green",
+            },
+          ],
+          done: "Android host is ready. Run lynxship doctor, then lynxship build.",
+        },
+      );
+      return;
+    }
     assert(
       ui.interactive,
       "CLI_INTERACTIVE_REQUIRED",
       "Run `lynxship android configure` in an interactive terminal",
     );
     assert(
-      (args.shift() ?? "configure") === "configure",
+      subcommand === "configure",
       "CLI_ANDROID_COMMAND",
       "Only android configure is available",
     );
@@ -1581,7 +1713,7 @@ async function main(): Promise<void> {
         assert(
           false,
           "ANDROID_HOST_REQUIRED",
-          "A real Android build requires an Android Gradle host. Add android/gradlew and the native Lynx host, or use --local for contract tests.",
+          "This project has no Android Gradle host. For live development, run `lynxship dev` and scan the QR code with Lynx Explorer; for an APK/AAB, integrate the official Lynx Android host under `android/` (including android/gradlew). `--local` is only for contract tests and does not create an APK.",
         );
       if (realAndroid) {
         await runRealAndroidBuild(job, {

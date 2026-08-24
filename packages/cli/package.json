@@ -1,6 +1,6 @@
 {
   "name": "@lynxship/cli",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "description": "Build, sign, store, submit and update LynxJS applications from the terminal.",
   "type": "module",
   "license": "MIT",
@@ -25,7 +25,8 @@
   ],
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "templates"
   ],
   "engines": {
     "node": ">=22.0.0"

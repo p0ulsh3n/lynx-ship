@@ -1,0 +1,3 @@
+interface:
+  display_name: "LynxShip Platform Engineering"
+  short_description: "Current API, storage, worker, dashboard, and platform guidance"

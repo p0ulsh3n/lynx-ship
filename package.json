@@ -18,7 +18,8 @@
     "build": "tsx scripts/build.ts",
     "dashboard:dev": "pnpm --filter @lynxship/dashboard dev",
     "dashboard:build": "pnpm --filter @lynxship/dashboard build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "skills:check-links": "node scripts/check-skill-links.mjs"
   },
   "engines": {
     "node": ">=22.0.0"

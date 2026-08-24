@@ -178,6 +178,27 @@ jobs:
           pnpm install --frozen-lockfile --reporter=append-only
       - name: Build CLI
         run: pnpm --filter @lynxship/cli build
+      - name: Generate and compile the LynxShip iOS host
+        shell: bash
+        run: |
+          node packages/cli/dist/index.js ios host init \
+            --project-dir examples/lynx-basic-template \
+            --bundle-identifier com.lynxship.ci \
+            --non-interactive \
+            --json
+          cp "$RUNNER_TEMP/integrating-lynx-demo-projects/ios/HelloLynxSwift/main.lynx.bundle" \
+            examples/lynx-basic-template/ios/main.lynx.bundle
+          pushd examples/lynx-basic-template/ios
+          pod install --no-repo-update
+          xcodebuild \
+            -workspace LynxBasicTemplate.xcworkspace \
+            -scheme LynxBasicTemplate \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          popd
       - name: Verify iOS host diagnostics
         shell: bash
         run: |
