@@ -6,8 +6,8 @@ packages:
 onlyBuiltDependencies:
   - esbuild
 allowBuilds:
-  "@biomejs/biome": set this to true or false
-  core-js: set this to true or false
-  electron: set this to true or false
-  electron-winstaller: set this to true or false
+  "@biomejs/biome": false
+  core-js: true
+  electron: false
+  electron-winstaller: false
   esbuild: true
