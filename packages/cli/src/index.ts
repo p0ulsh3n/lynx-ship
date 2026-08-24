@@ -717,17 +717,17 @@ async function main(): Promise<void> {
         value:
           nodeMajor >= 22 && nodeMajor % 2 === 0
             ? process.version
-            : `${process.version} · use an even Active/Current LTS line (22, 24 or 26)`,
+            : `${process.version} · fix: use Node 24 LTS`,
       },
       {
         name: "package-manager-lockfile",
         ok: Boolean(lockfile),
-        value: lockfile ?? "missing",
+        value: lockfile ?? "missing · fix: npm install or pnpm install",
       },
       {
         name: "lynxship.json",
         ok: await exists(join(root, "lynxship.json")),
-        value: config.projectId ? "found" : "missing",
+        value: config.projectId ? "found" : "missing · fix: lynxship init",
       },
       {
         name: "cloudflare-r2",
@@ -749,12 +749,14 @@ async function main(): Promise<void> {
               : "run lynxship android configure"
             : process.platform === "darwin" && hasIosHost(root)
               ? "Xcode host found"
-              : "macOS/Xcode host required",
+              : "missing · fix: use macOS with Xcode",
       },
       {
         name: `lynx-autolink-${doctorPlatform}`,
         ok: autolinkForPlatform.ready,
-        value: autolinkForPlatform.reason,
+        value: autolinkForPlatform.ready
+          ? autolinkForPlatform.reason
+          : `${autolinkForPlatform.reason} · fix: install the native plugin, then run autolink codegen`,
       },
     ];
     const result = { ok: checks.every((check) => check.ok), checks };
