@@ -167,6 +167,10 @@ export function formatEvent(message: string): string {
   return `  ${colors[tone](marker)} ${colors[tone](normalized)}`;
 }
 
+function formatEventRail(): string {
+  return `  ${c.text(supportsUnicode() ? "│" : "|")}`;
+}
+
 const activeAnimations = new Set<() => void>();
 let cleanupHooksInstalled = false;
 
@@ -238,8 +242,13 @@ export function createProgress(
     if (!bar.isActive) return;
     const tone = eventTone(message);
     bar.stop();
-    if (tone === "output" && previousTone === "output") console.log();
+    if (
+      tone !== "output" &&
+      (previousTone === undefined || previousTone === "output")
+    )
+      console.log(formatEventRail());
     console.log(formatEvent(message));
+    if (tone !== "output") console.log(formatEventRail());
     bar.start(100, currentValue, payload(currentLabel));
     previousTone = tone;
   };
