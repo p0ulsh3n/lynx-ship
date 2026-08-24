@@ -6,7 +6,7 @@ await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
 const runPnpm = (args: string[]) =>
   process.platform === "win32"
-    ? exec("cmd.exe", ["/d", "/s", "/c", `pnpm.cmd ${args.join(" ")}`])
+    ? exec("cmd.exe", ["/d", "/c", "pnpm.cmd", ...args])
     : exec("pnpm", args);
 await runPnpm(["--filter", "@lynxship/api", "build"]);
 await runPnpm(["--filter", "@lynxship/cli", "build"]);
