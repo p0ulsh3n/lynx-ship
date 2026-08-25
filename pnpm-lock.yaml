@@ -147,6 +147,9 @@ importers:
       '@lynxship/db':
         specifier: workspace:*
         version: link:../db
+      '@lynxship/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
       '@lynxship/signing':
         specifier: workspace:*
         version: link:../signing
@@ -262,6 +265,12 @@ importers:
       '@types/pg':
         specifier: 8.23.1
         version: 8.23.1
+
+  packages/plugin-api:
+    dependencies:
+      '@lynxship/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/queue:
     dependencies:

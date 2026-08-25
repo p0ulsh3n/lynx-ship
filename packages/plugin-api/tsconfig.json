@@ -8,12 +8,5 @@
     "composite": true
   },
   "include": ["src"],
-  "references": [
-    { "path": "../build-orchestrator" },
-    { "path": "../contracts" },
-    { "path": "../plugin-api" },
-    { "path": "../db" },
-    { "path": "../signing" },
-    { "path": "../submit" }
-  ]
+  "references": [{ "path": "../contracts" }]
 }

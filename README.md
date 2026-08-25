@@ -230,6 +230,30 @@ Installing the npm package does not start Docker and does not create cloud
 resources automatically. Run `lynxship self-host init` and `docker compose up
 -d` only when you operate the self-hosted API yourself.
 
+## Plugin ecosystem
+
+LynxShip exposes a versioned public plugin API through
+`@lynxship/plugin-api`. Plugins are normal, lockfile-pinned npm packages that
+can contribute project configuration, bounded native-file changes, Autolink
+metadata, template metadata and cloud-provider metadata.
+
+```bash
+npm install --save-dev @example/lynx-plugin
+lynxship plugin doctor
+lynxship plugin list
+lynxship plugin apply --platform android --profile production
+```
+
+Add enabled packages to the `plugins` array in `lynxship.json`. Native plugin
+changes are applied automatically by `lynxship build` after host initialization
+and before the Autolink/runtime checks. The complete public contract, package
+manifest and security boundaries are in
+[`docs/plugin-ecosystem.md`](docs/plugin-ecosystem.md).
+
+The plugin API does not pretend to be a hosted EAS replacement by itself:
+cloud workers, credentials, store providers and a template registry remain
+separate services with their own release and security review.
+
 ## What LynxShip does
 
 - **Build** LynxJS bundles with the project's Rspeedy configuration.
@@ -871,12 +895,15 @@ cd <path-to-lynx-ship>
 npm config set registry https://registry.npmjs.org/
 npm whoami
 pnpm install --frozen-lockfile
+pnpm --filter @lynxship/plugin-api build
 pnpm --filter @lynxship/cli... build
 pnpm --filter create-lynxship-app build
+pnpm --filter @lynxship/plugin-api pack --dry-run
 pnpm --filter @lynxship/cli pack --dry-run
 pnpm --filter create-lynxship-app pack --dry-run
 
 # Publish only the public packages whose versions changed.
+pnpm --filter @lynxship/plugin-api publish --access public --no-git-checks
 pnpm --filter @lynxship/cli publish --access public --no-git-checks
 pnpm --filter create-lynxship-app publish --access public --no-git-checks
 ```
@@ -889,6 +916,7 @@ published result with:
 
 ```bash
 npm view @lynxship/cli version
+npm view @lynxship/plugin-api version
 npm view create-lynxship-app version
 npm install --global @lynxship/cli@latest
 ```

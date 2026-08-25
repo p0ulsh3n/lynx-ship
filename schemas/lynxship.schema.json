@@ -7,6 +7,24 @@
   "properties": {
     "$schema": { "type": "string" },
     "projectId": { "type": "string", "minLength": 1 },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string", "minLength": 1 },
+          {
+            "type": "array",
+            "prefixItems": [
+              { "type": "string", "minLength": 1 },
+              { "type": "object", "additionalProperties": true }
+            ],
+            "items": false,
+            "minItems": 2,
+            "maxItems": 2
+          }
+        ]
+      }
+    },
     "cli": {
       "type": "object",
       "additionalProperties": false,

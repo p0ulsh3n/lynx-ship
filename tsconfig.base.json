@@ -25,6 +25,7 @@
       "@lynxship/cli/frameworks": ["packages/cli/src/frameworks.ts"],
       "@lynxship/cli/ui/*": ["packages/cli/src/ui/*"],
       "@lynxship/contracts": ["packages/contracts/src/index.ts"],
+      "@lynxship/plugin-api": ["packages/plugin-api/src/index.ts"],
       "@lynxship/db": ["packages/db/src/index.ts"],
       "@lynxship/queue": ["packages/queue/src/index.ts"],
       "@lynxship/signing": ["packages/signing/src/index.ts"],

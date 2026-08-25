@@ -97,6 +97,7 @@ import { hasHarmonyHost, runRealHarmonyBuild } from "./harmony-build.js";
 import { hasWebConfiguration, runRealWebBuild } from "./web-build.js";
 import { hasDesktopHost, runRealDesktopBuild } from "./desktop-build.js";
 import { extractDevServerUrl, shouldPrintDevServerQr } from "./dev-qr.js";
+import { applyProjectPlugins, inspectProjectPlugins } from "./plugins.js";
 import {
   inspectDesktopTarget,
   inspectHarmonyTarget,
@@ -427,7 +428,21 @@ async function executeBuild(
   // Host initialization can write lynxship.json (for example, the generated
   // iOS scheme). Always read it again before resolving the build profile so a
   // first build uses the host that was just created in the same invocation.
-  const effectiveConfig = wait && !local ? await loadConfig(root) : config;
+  const loadedConfig = wait && !local ? await loadConfig(root) : config;
+  const pluginApplication =
+    wait && !local
+      ? await applyProjectPlugins(root, loadedConfig, { platform, profile })
+      : {
+          config: loadedConfig,
+          report: { configured: 0, plugins: [] },
+          applied: [],
+          templates: [],
+          cloud: [],
+          build: [],
+          changes: [],
+          autolink: [],
+        };
+  const effectiveConfig = pluginApplication.config;
   if (platform === "android" || platform === "ios")
     await requireAutolinkReady(root, platform);
   const runtime = await inspectRuntimeFingerprint(
@@ -661,6 +676,7 @@ function commandTitle(command: string): string {
       devtool: "Lynx DevTool diagnostics",
       trace: "Lynx Trace diagnostics",
       recorder: "Lynx Recorder diagnostics",
+      plugin: "LynxShip plugins",
     }[command] ?? command
   );
 }
@@ -678,6 +694,10 @@ Commands:
   devtool doctor          Check Lynx DevTool integration and dev runtime
   trace doctor            Check Lynx Trace prerequisites
   recorder doctor         Check Lynx Recorder prerequisites
+  plugin list             List project plugins and their capabilities
+  plugin doctor            Validate plugin packages without modifying native files
+  plugin apply             Apply project plugin native changes for a platform
+  plugin apply --dry-run   Preview plugin native changes without writing files
   autolink check          Check Lynx native-library Autolink wiring
   autolink codegen        Run the project's Native Module codegen script
   ota doctor              Check native OTA host integration
@@ -1327,6 +1347,94 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (command === "plugin") {
+    const subcommand = args.shift() ?? "list";
+    assert(
+      ["list", "doctor", "apply"].includes(subcommand),
+      "CLI_PLUGIN_COMMAND",
+      "Use \`lynxship plugin list\`, \`lynxship plugin doctor\` or \`lynxship plugin apply\`.",
+    );
+    await requireProjectRoot();
+    const config = await loadConfig(root);
+    const report = await inspectProjectPlugins(root, config);
+    if (subcommand === "apply") {
+      const platform = platformValue(flag("--platform", "android")!);
+      const profile = flag("--profile", "production")!;
+      const dryRun = args.includes("--dry-run");
+      const result = await applyProjectPlugins(root, config, {
+        platform,
+        profile,
+        mode: dryRun ? "plan" : "apply",
+      });
+      printValue(
+        {
+          status: dryRun ? "planned" : "applied",
+          platform,
+          profile,
+          plugins: result.applied,
+          nativeChanges: result.changes.filter((change) => change.changed)
+            .length,
+          changes: result.changes,
+          templates: result.templates,
+          cloud: result.cloud,
+          build: result.build,
+        },
+        {
+          title: `LynxShip plugins · ${platform}`,
+          rows: [
+            {
+              label: "Applied",
+              value: result.applied.length ? result.applied.join(", ") : "none",
+              valueColor: "green",
+            },
+            {
+              label: "Native changes",
+              value: String(
+                result.changes.filter((change) => change.changed).length,
+              ),
+              valueColor: "blue",
+            },
+          ],
+          done: dryRun
+            ? "No native files were modified; review the planned changes."
+            : "Project plugin changes are applied atomically and idempotently.",
+        },
+      );
+      return;
+    }
+    const invalid = report.plugins.filter(
+      (plugin) => plugin.status !== "ready",
+    );
+    printValue(report, {
+      title: `LynxShip plugins · ${subcommand}`,
+      rows:
+        report.plugins.length > 0
+          ? report.plugins.map((plugin) => ({
+              label: plugin.name,
+              value: `${plugin.status} · ${plugin.capabilities.join(", ") || "no capabilities"} · ${plugin.reason}`,
+              valueColor:
+                plugin.status === "ready"
+                  ? "green"
+                  : plugin.status === "missing"
+                    ? "red"
+                    : "yellow",
+            }))
+          : [
+              {
+                label: "Plugins",
+                value: "none configured",
+                valueColor: "muted",
+              },
+            ],
+      done:
+        invalid.length === 0
+          ? "All project plugin manifests are valid."
+          : "Fix the invalid plugin package before building.",
+    });
+    if (subcommand === "doctor" && invalid.length > 0) process.exitCode = 1;
+    return;
+  }
+
   if (command === "doctor") {
     const config = await loadConfig(root);
     const configuration = await readConfigurationStatus();
@@ -1391,6 +1499,10 @@ async function main(): Promise<void> {
     const nodeSupported = nodeMajor >= 22;
     const nodeRecommended = nodeMajor % 2 === 0;
     const framework = await detectLynxFramework(root);
+    const pluginReport = await inspectProjectPlugins(root, config);
+    const invalidPlugins = pluginReport.plugins.filter(
+      (plugin) => plugin.status !== "ready",
+    );
     const checks = [
       {
         name: "lynx-framework",
@@ -1448,6 +1560,18 @@ async function main(): Promise<void> {
         ok: config.projectId !== undefined,
         status: config.projectId ? "pass" : "fail",
         value: config.projectId ? "found" : "missing · fix: lynxship init",
+      },
+      {
+        name: "lynxship-plugins",
+        ok: invalidPlugins.length === 0,
+        status:
+          invalidPlugins.length === 0 ? ("pass" as const) : ("fail" as const),
+        value:
+          invalidPlugins.length === 0
+            ? pluginReport.configured === 0
+              ? "none configured"
+              : `${pluginReport.configured} plugin(s) ready`
+            : `${invalidPlugins.map((plugin) => plugin.name).join(", ")} · fix: lynxship plugin doctor`,
       },
       {
         name: "credential-store",

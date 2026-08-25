@@ -19,6 +19,10 @@ trace doctor                 Check Lynx Trace prerequisites
 recorder doctor              Check Lynx Recorder prerequisites
 autolink check               Check native-library wiring
 autolink codegen             Run native-module codegen
+plugin list                  List project plugin packages
+plugin doctor                Validate plugin metadata without changing files
+plugin apply                 Apply plugin configuration/native changes
+plugin apply --dry-run       Preview plugin changes without writing files
 ota doctor                   Check native OTA host integration
 build create                 Build, sign and upload an artifact
 build all                    Build Android, iOS, HarmonyOS, Web and Desktop

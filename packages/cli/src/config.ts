@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { assert, type Platform } from "@lynxship/contracts";
+import type { PluginReference } from "@lynxship/plugin-api";
 
 export interface BuildProfile {
   distribution?: string;
@@ -45,6 +46,7 @@ export interface BuildProfile {
 
 export interface LynxShipConfig {
   projectId?: string;
+  plugins?: PluginReference[];
   cli?: {
     apiUrl?: string;
     organizationId?: string;
@@ -93,6 +95,7 @@ const allowedRootKeys = new Set([
   "submit",
   "update",
   "artifacts",
+  "plugins",
 ]);
 
 export function validateConfig(
@@ -118,6 +121,29 @@ export function validateConfig(
       "CONFIG_PROJECT_ID",
       "projectId must be a non-empty string",
     );
+  if (value.plugins !== undefined) {
+    assert(
+      Array.isArray(value.plugins),
+      "CONFIG_PLUGINS",
+      "plugins must be an array of package names or [package, options] tuples",
+    );
+    for (const plugin of value.plugins) {
+      const validString = typeof plugin === "string" && plugin.length > 0;
+      const validTuple =
+        Array.isArray(plugin) &&
+        plugin.length === 2 &&
+        typeof plugin[0] === "string" &&
+        plugin[0].length > 0 &&
+        plugin[1] !== null &&
+        typeof plugin[1] === "object" &&
+        !Array.isArray(plugin[1]);
+      assert(
+        validString || validTuple,
+        "CONFIG_PLUGINS",
+        "Each plugin must be a package name or [package name, JSON options]",
+      );
+    }
+  }
   assert(
     value.runtimeVersion?.policy === undefined ||
       ["fingerprint", "manual"].includes(value.runtimeVersion.policy),

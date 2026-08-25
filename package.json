@@ -6,7 +6,7 @@
   "type": "module",
   "packageManager": "pnpm@11.19.0",
   "scripts": {
-    "test": "pnpm --filter @lynxship/cli build && pnpm --filter create-lynxship-app build && tsx --test test/core.test.ts test/api.test.ts test/cli.test.ts test/cli-ui.test.ts test/create-app.test.ts",
+    "test": "pnpm --filter @lynxship/cli build && pnpm --filter create-lynxship-app build && tsx --test test/core.test.ts test/api.test.ts test/cli.test.ts test/cli-ui.test.ts test/create-app.test.ts test/plugins.test.ts",
     "lint": "pnpm structure:check && tsx scripts/lint.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

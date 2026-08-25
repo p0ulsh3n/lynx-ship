@@ -25,6 +25,26 @@ npx @lynxship/cli@latest doctor --project-dir ./my-lynx-app
 
 The package exposes the `lynxship` executable.
 
+## Plugin ecosystem
+
+Install a community plugin as a normal project dependency, list it in
+`lynxship.json`, then validate it before building:
+
+```bash
+npm install --save-dev @example/lynx-plugin
+npx lynxship plugin doctor
+npx lynxship plugin list
+npx lynxship plugin apply --platform android --profile production
+```
+
+The public contract is exported by `@lynxship/plugin-api`. Plugins can make
+JSON configuration contributions and bounded, idempotent Android/iOS/native
+file changes. Autolink remains the official Lynx `lynx.lib.json` and codegen
+workflow. Template and cloud contributions are discoverable metadata until a
+reviewed provider or template service consumes them.
+
+See the full contract in the repository `docs/plugin-ecosystem.md`.
+
 ## Vue Lynx projects
 
 LynxShip supports projects created with the official Vue Lynx scaffold. Vue
@@ -514,7 +534,8 @@ actual recording and analysis.
 
 ## Package layout
 
-The CLI is backed by public `@lynxship/*` runtime packages in this workspace.
+The CLI is backed by public `@lynxship/*` runtime packages in this workspace,
+including the public `@lynxship/plugin-api` contract.
 Their published versions may differ from the CLI version; workspace ranges are
 rewritten to released versions when the package is packed. Publish a changed
 runtime package before publishing the CLI when its source or version changed.
