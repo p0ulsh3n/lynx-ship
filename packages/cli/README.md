@@ -25,6 +25,33 @@ npx @lynxship/cli doctor --project-dir ./my-lynx-app
 
 The package exposes the `lynxship` executable.
 
+## Vue Lynx projects
+
+LynxShip supports projects created with the official Vue Lynx scaffold. Vue
+Lynx is integrated through the project's Rspeedy configuration, so LynxShip
+does not swap plugins or mutate `lynx.config.*`; it invokes the project's
+package-manager `build` script and then passes the generated Lynx bundle to
+the selected native or non-native target pipeline.
+
+```bash
+npm create vue-lynx@latest my-vue-lynx-app
+cd my-vue-lynx-app
+npm install
+npx @lynxship/cli@latest init
+npx @lynxship/cli@latest doctor
+npx @lynxship/cli@latest build --platform android --profile production
+```
+
+For iOS Simulator on macOS:
+
+```bash
+npx @lynxship/cli@latest build --platform ios --simulator --no-upload
+```
+
+The CLI generator itself creates ReactLynx templates by default. Use the
+official `create-vue-lynx` scaffold when Vue is required, then add LynxShip to
+that existing project with `init`.
+
 ## Requirements
 
 - Node.js 22 or 24 LTS, or Node.js 26 Current; Node.js 24 LTS is the
@@ -385,6 +412,18 @@ Swift host based on Lynx's official integration shape: `LynxEnv`, `LynxView`,
 script. On macOS, `lynxship build --platform ios` installs CocoaPods before
 archiving. Xcode, CocoaPods and real Apple signing credentials are still
 required for a signed IPA; the CLI never fabricates them.
+
+For an iOS Simulator build, use the dedicated simulator profile:
+
+```bash
+lynxship doctor --project-dir ./my-lynx-app --platform ios --profile simulator
+lynxship build --project-dir ./my-lynx-app --platform ios --simulator --profile simulator --no-upload
+```
+
+This uses Xcode's `iphonesimulator` SDK, boots an available Simulator, creates
+and installs a local `.app`, and does not require a physical iPhone, Apple
+Distribution certificate, provisioning profile or R2 upload. Use the
+production profile only for a signed device IPA.
 
 Run the complete first-use diagnosis before building:
 

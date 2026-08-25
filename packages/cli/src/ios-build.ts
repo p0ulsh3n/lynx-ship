@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -6,17 +7,297 @@ import { transitionBuild } from "@lynxship/build-orchestrator";
 import type { BuildProfile } from "./config.js";
 import { loadR2, uploadR2Artifact } from "./r2.js";
 import { nativeArtifactName } from "./artifact-name.js";
-import { commandExists, runProcess } from "./process-runner.js";
+import { captureProcess, commandExists, runProcess } from "./process-runner.js";
 import { buildLynxBundle } from "./bundle-build.js";
 
 interface IosBuildOptions {
   root: string;
   profile: BuildProfile;
   uploadArtifacts?: boolean;
+  simulator?: boolean;
+  simulatorDevice?: string;
   skipBundleBuild?: boolean;
   quiet?: boolean;
   onEvent?: (message: string) => void;
   onProgress?: (value?: number, label?: string) => void;
+}
+
+interface SimulatorDevice {
+  udid: string;
+  state: string;
+  isAvailable?: boolean;
+}
+
+async function listSimulatorDevices(
+  root: string,
+  filter: "booted" | "available",
+): Promise<SimulatorDevice[]> {
+  const result = await captureProcess(
+    "xcrun",
+    ["simctl", "list", "devices", filter, "--json"],
+    { cwd: root },
+  );
+  if (result.code !== 0) return [];
+  try {
+    const parsed = JSON.parse(result.stdout) as {
+      devices?: Record<string, SimulatorDevice[]>;
+    };
+    return Object.values(parsed.devices ?? {}).flat();
+  } catch {
+    return [];
+  }
+}
+
+async function selectSimulatorDevice(
+  root: string,
+  requested?: string,
+): Promise<string> {
+  if (requested) return requested;
+  const booted = (await listSimulatorDevices(root, "booted"))[0];
+  if (booted) return booted.udid;
+  const available = (await listSimulatorDevices(root, "available")).find(
+    (device) => device.isAvailable !== false,
+  );
+  assert(
+    available,
+    "IOS_SIMULATOR_RUNTIME_REQUIRED",
+    "No available iOS Simulator device was found. Install an iOS Simulator runtime in Xcode, then rerun the build.",
+  );
+  return available.udid;
+}
+
+async function ensureSimulatorBooted(
+  root: string,
+  device: string,
+  onEvent?: (message: string) => void,
+  quiet?: boolean,
+): Promise<void> {
+  const booted = (await listSimulatorDevices(root, "booted")).some(
+    (entry) => entry.udid === device,
+  );
+  if (!booted) {
+    onEvent?.(`Booting iOS Simulator ${device}…`);
+    await runProcess("xcrun", ["simctl", "boot", device], {
+      cwd: root,
+      quiet,
+      onOutput: onEvent,
+    });
+  }
+  await runProcess("xcrun", ["simctl", "bootstatus", device, "-b"], {
+    cwd: root,
+    quiet,
+    onOutput: onEvent,
+  });
+}
+
+async function findSimulatorApp(
+  root: string,
+  derivedData: string,
+  configuration: string,
+  scheme: string,
+): Promise<string> {
+  const products = join(
+    derivedData,
+    "Build",
+    "Products",
+    `${configuration}-iphonesimulator`,
+  );
+  const expected = join(products, `${scheme}.app`);
+  if (existsSync(expected)) return expected;
+  const entries = await readdir(products, { withFileTypes: true }).catch(
+    () => [],
+  );
+  const app = entries.find(
+    (entry) => entry.isDirectory() && entry.name.endsWith(".app"),
+  );
+  assert(
+    app,
+    "IOS_SIMULATOR_ARTIFACT_MISSING",
+    `Xcode did not produce a Simulator .app under ${products}`,
+  );
+  return join(products, app.name);
+}
+
+async function hashDirectory(directory: string): Promise<{
+  hash: string;
+  size: number;
+}> {
+  const hash = createHash("sha256");
+  let size = 0;
+
+  async function visit(current: string, relative: string): Promise<void> {
+    const entries = await readdir(current, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const entryRelative = relative ? `${relative}/${entry.name}` : entry.name;
+      const entryPath = join(current, entry.name);
+      if (entry.isDirectory()) {
+        hash.update(`dir:${entryRelative}\n`);
+        await visit(entryPath, entryRelative);
+      } else {
+        const content = await readFile(entryPath);
+        size += content.length;
+        hash.update(`file:${entryRelative}:${content.length}\n`);
+        hash.update(content.toString("latin1"), "latin1");
+      }
+    }
+  }
+
+  await visit(directory, "");
+  return { hash: hash.digest("hex"), size };
+}
+
+async function runRealIosSimulatorBuild(
+  job: BuildJob,
+  options: IosBuildOptions,
+): Promise<BuildJob> {
+  assert(
+    process.platform === "darwin",
+    "IOS_MACOS_REQUIRED",
+    "iOS Simulator builds require macOS with Xcode",
+  );
+  assert(
+    commandExists("xcodebuild"),
+    "IOS_XCODE_REQUIRED",
+    "xcodebuild was not found. Install Xcode and select its command-line tools.",
+  );
+  assert(
+    commandExists("xcrun"),
+    "IOS_XCRUN_REQUIRED",
+    "xcrun was not found. Install Xcode command-line tools.",
+  );
+  const project = findProject(options.root, options.profile);
+  const ios = options.profile.ios ?? {};
+  assert(
+    ios.scheme,
+    "IOS_SCHEME_REQUIRED",
+    "Configure ios.scheme in the selected Simulator build profile",
+  );
+  const projectFlag = project.endsWith(".xcworkspace")
+    ? "-workspace"
+    : "-project";
+  const configuration = ios.configuration ?? "Debug";
+  const device = await selectSimulatorDevice(
+    options.root,
+    options.simulatorDevice,
+  );
+  await installCocoaPods(options.root, options.quiet, options.onEvent);
+  const directory = join(options.root, ".lynxship", "ios", job.id, "simulator");
+  const derivedData = join(directory, "derived-data");
+  const step = (message: string, progress?: number): void => {
+    options.onEvent?.(message);
+    options.onProgress?.(progress, message);
+  };
+  try {
+    assert(
+      options.uploadArtifacts !== true,
+      "IOS_SIMULATOR_UPLOAD_BLOCKED",
+      "iOS Simulator .app builds stay local. Use --no-upload; simulator artifacts are not store artifacts.",
+    );
+    await mkdir(directory, { recursive: true });
+    transitionBuild(job, "uploading_source", "iOS Simulator source prepared");
+    if (options.skipBundleBuild) {
+      step("Using shared Lynx bundle", 5);
+    } else {
+      step("Building Lynx bundle with Rspeedy…", 5);
+      await buildLynxBundle(options.root, {
+        quiet: options.quiet,
+        onOutput: options.onEvent,
+      });
+    }
+    if (ios.bundleScript) {
+      step("Syncing bundle into the iOS host…", 8);
+      await runProcess(
+        process.execPath,
+        [resolve(options.root, ios.bundleScript)],
+        {
+          cwd: options.root,
+          quiet: options.quiet,
+          onOutput: options.onEvent,
+        },
+      );
+    }
+    transitionBuild(job, "queued", "iOS Simulator build queued locally");
+    transitionBuild(job, "provisioning", "iOS Simulator destination selected");
+    transitionBuild(
+      job,
+      "installing_dependencies",
+      "iOS Simulator dependencies ready",
+    );
+    await ensureSimulatorBooted(
+      options.root,
+      device,
+      options.onEvent,
+      options.quiet,
+    );
+    step("Building iOS Simulator .app…", 15);
+    transitionBuild(job, "building", "iOS Simulator build started");
+    await runProcess(
+      "xcodebuild",
+      [
+        projectFlag,
+        project,
+        "-scheme",
+        ios.scheme,
+        "-configuration",
+        configuration,
+        "-sdk",
+        "iphonesimulator",
+        "-destination",
+        `id=${device}`,
+        "-derivedDataPath",
+        derivedData,
+        "CODE_SIGNING_ALLOWED=NO",
+        "CODE_SIGNING_REQUIRED=NO",
+        "build",
+      ],
+      { cwd: options.root, quiet: options.quiet, onOutput: options.onEvent },
+    );
+    const appPath = await findSimulatorApp(
+      options.root,
+      derivedData,
+      configuration,
+      ios.scheme,
+    );
+    step("Installing .app in iOS Simulator…", 75);
+    await runProcess("xcrun", ["simctl", "install", device, appPath], {
+      cwd: options.root,
+      quiet: options.quiet,
+      onOutput: options.onEvent,
+    });
+    const artifact = await hashDirectory(appPath);
+    const artifactName = nativeArtifactName("app");
+    job.attempts += 1;
+    job.artifact = {
+      name: artifactName,
+      hash: artifact.hash,
+      path: appPath,
+      size: artifact.size,
+      contentType: "application/octet-stream",
+    };
+    transitionBuild(job, "signing", "Simulator app verification completed");
+    transitionBuild(
+      job,
+      "uploading_artifacts",
+      "Simulator app collected locally",
+    );
+    step(`Simulator app ready: ${artifactName}`, 100);
+    return transitionBuild(job, "success", "iOS Simulator app created");
+  } catch (error) {
+    if (!["success", "failed", "canceled", "timed_out"].includes(job.state))
+      transitionBuild(
+        job,
+        "failed",
+        error instanceof Error ? error.message : "iOS Simulator build failed",
+      );
+    job.logs.push({
+      level: "error",
+      message:
+        error instanceof Error ? error.message : "iOS Simulator build failed",
+      at: new Date().toISOString(),
+    });
+    throw error;
+  }
 }
 
 export function hasIosHost(root: string, profile?: BuildProfile): boolean {
@@ -91,6 +372,7 @@ export async function runRealIosBuild(
   job: BuildJob,
   options: IosBuildOptions,
 ): Promise<BuildJob> {
+  if (options.simulator) return runRealIosSimulatorBuild(job, options);
   assert(
     process.platform === "darwin",
     "IOS_MACOS_REQUIRED",

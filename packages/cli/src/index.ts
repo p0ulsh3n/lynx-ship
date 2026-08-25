@@ -300,6 +300,11 @@ function mobilePlatformValue(value: string): MobilePlatform {
 
 async function renderConfigurationFooter(): Promise<void> {
   if (!ui.interactive || ui.options.quiet) return;
+  if (rawArgs[0] === "inspect") return;
+  const profileIndex = rawArgs.indexOf("--profile");
+  const simulatorProfile =
+    profileIndex >= 0 && rawArgs[profileIndex + 1] === "simulator";
+  if (rawArgs.includes("--simulator") || simulatorProfile) return;
   const status = await readConfigurationStatus();
   const ready = status.r2 && status.android;
   if (ready) return;
@@ -384,6 +389,8 @@ interface BuildExecutionOptions {
   onProgress?: (value?: number, label?: string) => void;
   onEvent?: (message: string) => void;
   skipBundleBuild?: boolean;
+  simulator?: boolean;
+  simulatorDevice?: string;
 }
 
 async function executeBuild(
@@ -406,13 +413,24 @@ async function executeBuild(
     onProgress,
     onEvent,
     skipBundleBuild,
+    simulator = false,
+    simulatorDevice,
   } = options;
   if (wait && !local) await ensureNativeHostForBuild(platform, profile, config);
+  // Host initialization can write lynxship.json (for example, the generated
+  // iOS scheme). Always read it again before resolving the build profile so a
+  // first build uses the host that was just created in the same invocation.
+  const effectiveConfig = wait && !local ? await loadConfig(root) : config;
   if (platform === "android" || platform === "ios")
     await requireAutolinkReady(root, platform);
-  const runtime = await inspectRuntimeFingerprint(root, platform, config);
+  const runtime = await inspectRuntimeFingerprint(
+    root,
+    platform,
+    effectiveConfig,
+  );
+  const resolvedBuildProfile = resolveProfile(effectiveConfig, profile);
   const job = await builds.create({
-    projectId: configuredProjectId(config),
+    projectId: configuredProjectId(effectiveConfig),
     organizationId: "local_org",
     platform,
     profile,
@@ -448,7 +466,8 @@ async function executeBuild(
         isSupportedAndroidPlatform() &&
         (await hasAndroidHost(root));
       const realIos =
-        platform === "ios" && hasIosHost(root, resolveProfile(config, profile));
+        platform === "ios" &&
+        hasIosHost(root, resolveProfile(effectiveConfig, profile));
       if (platform === "ios" && !realIos && !local)
         assert(
           false,
@@ -470,7 +489,7 @@ async function executeBuild(
         );
         await runRealAndroidBuild(job, {
           root,
-          profile: config.build?.[profile] ?? {},
+          profile: resolvedBuildProfile,
           uploadArtifacts: !skipUpload,
           skipBundleBuild,
           quiet: json,
@@ -480,7 +499,8 @@ async function executeBuild(
       } else if (realIos) {
         const toolchain = await inspectIosToolchain(
           root,
-          resolveProfile(config, profile),
+          resolveProfile(effectiveConfig, profile),
+          simulator ? "simulator" : "device",
         );
         assert(
           toolchain.ok,
@@ -489,7 +509,9 @@ async function executeBuild(
         );
         await runRealIosBuild(job, {
           root,
-          profile: config.build?.[profile] ?? {},
+          profile: resolvedBuildProfile,
+          simulator,
+          simulatorDevice,
           uploadArtifacts: !skipUpload,
           skipBundleBuild,
           quiet: json,
@@ -499,7 +521,7 @@ async function executeBuild(
       } else if (!local && platform === "web") {
         await runRealWebBuild(job, {
           root,
-          profile: resolveProfile(config, profile),
+          profile: resolveProfile(effectiveConfig, profile),
           uploadArtifacts: !skipUpload,
           skipBundleBuild,
           quiet: json,
@@ -509,7 +531,7 @@ async function executeBuild(
       } else if (!local && platform === "harmony") {
         await runRealHarmonyBuild(job, {
           root,
-          profile: resolveProfile(config, profile),
+          profile: resolveProfile(effectiveConfig, profile),
           uploadArtifacts: !skipUpload,
           skipBundleBuild,
           quiet: json,
@@ -519,7 +541,7 @@ async function executeBuild(
       } else if (!local && platform === "desktop") {
         await runRealDesktopBuild(job, {
           root,
-          profile: resolveProfile(config, profile),
+          profile: resolveProfile(effectiveConfig, profile),
           uploadArtifacts: !skipUpload,
           allowUnsigned: options.allowUnsigned,
           skipBundleBuild,
@@ -669,9 +691,11 @@ Commands:
 
 Build options:
   --platform <p>          Target android, ios, harmony, web, desktop or all (default: android)
-  --profile <name>        Build profile (default: production)
+  --profile <name>        Build profile (default: production; simulator uses simulator)
   --no-wait               Queue the build without executing it locally
   --no-upload              Keep the artifact local and skip R2 (CI verification)
+  --simulator             Build and install an iOS Simulator .app locally
+  --device <id>           Select the iOS Simulator device for a simulator build
   --allow-unsigned         Allow an unsigned Desktop artifact only with --no-upload (local tests)
   --local                 Use the contract-only build path for tests
 
@@ -717,7 +741,7 @@ Global options:
   --application-id <id>   Android package/application ID for host init
   --bundle-identifier <id> iOS bundle identifier for host init
   --library-dir <path>    Native library directory for autolink codegen
-  --simulator             Install an iOS .app on a simulator with simctl
+  --simulator             Build/install an iOS .app or install one with simctl
   --help                  Show this complete command reference
 
 Node support: Node 22/24 LTS or Node 26 Current. Use Node 24 LTS for production.`;
@@ -746,7 +770,9 @@ async function looksLikeLynxProject(): Promise<boolean> {
       ...packageJson.devDependencies,
     };
     return (
-      Object.keys(dependencies).some((name) => name.startsWith("@lynx-js/")) ||
+      Object.keys(dependencies).some(
+        (name) => name.startsWith("@lynx-js/") || name === "vue-lynx",
+      ) ||
       Object.values(packageJson.scripts ?? {}).some((script) =>
         script.includes("rspeedy"),
       )
@@ -1293,12 +1319,7 @@ async function main(): Promise<void> {
     const androidHost =
       doctorPlatform === "android" ? await hasAndroidHost(root) : false;
     const doctorProfileName = flag("--profile", "production")!;
-    const doctorProfile = config.build?.[doctorProfileName]
-      ? resolveProfile(config, doctorProfileName)
-      : {
-          name: doctorProfileName,
-          ...(DEFAULT_CONFIG.build?.production ?? {}),
-        };
+    const doctorProfile = resolveProfile(config, doctorProfileName);
     const targetToolchain =
       doctorPlatform === "web"
         ? await inspectWebTarget(root, doctorProfile)
@@ -1323,7 +1344,13 @@ async function main(): Promise<void> {
         : undefined;
     const iosToolchain =
       doctorPlatform === "ios"
-        ? await inspectIosToolchain(root, doctorProfile)
+        ? await inspectIosToolchain(
+            root,
+            doctorProfile,
+            doctorProfile.ios?.simulator || doctorProfileName === "simulator"
+              ? "simulator"
+              : "device",
+          )
         : undefined;
     if (androidToolchain && args.includes("--fix")) {
       await fixAndroidToolchain(
@@ -1415,11 +1442,22 @@ async function main(): Promise<void> {
             }))),
       {
         name: "cloudflare-r2",
-        ok: configuration.r2,
-        status: configuration.r2 ? "pass" : "fail",
-        value: configuration.r2
-          ? "configured"
-          : "missing · fix: lynxship storage configure",
+        ok:
+          doctorPlatform === "ios" && doctorProfile.ios?.simulator
+            ? true
+            : configuration.r2,
+        status:
+          doctorPlatform === "ios" && doctorProfile.ios?.simulator
+            ? ("pass" as const)
+            : configuration.r2
+              ? ("pass" as const)
+              : ("fail" as const),
+        value:
+          doctorPlatform === "ios" && doctorProfile.ios?.simulator
+            ? "not required for iOS Simulator"
+            : configuration.r2
+              ? "configured"
+              : "missing · fix: lynxship storage configure",
       },
       ...(doctorPlatform === "android"
         ? [
@@ -2213,7 +2251,13 @@ async function main(): Promise<void> {
   const platformArgument = flag("--platform", "android")!;
   const buildAll = subcommand === "all" || platformArgument === "all";
   const platform = buildAll ? "android" : platformValue(platformArgument);
-  const skipUpload = args.includes("--no-upload");
+  const simulator = args.includes("--simulator");
+  const skipUpload = args.includes("--no-upload") || simulator;
+  assert(
+    !simulator || platformArgument === "ios",
+    "IOS_SIMULATOR_PLATFORM",
+    "The --simulator option is only available with --platform ios.",
+  );
   const allowUnsigned = args.includes("--allow-unsigned");
   assert(
     !allowUnsigned || skipUpload,
@@ -2249,7 +2293,8 @@ async function main(): Promise<void> {
     `Unknown build command: ${subcommand}`,
   );
   const config = await loadConfig(root);
-  const profile = flag("--profile", "production")!;
+  const profile = flag("--profile", simulator ? "simulator" : "production")!;
+  const simulatorDevice = flag("--device") ?? undefined;
   const wait = !args.includes("--no-wait");
   const local = args.includes("--local");
   const platforms: Platform[] = buildAll
@@ -2275,6 +2320,8 @@ async function main(): Promise<void> {
       allowUnsigned,
       wait,
       local,
+      simulator,
+      simulatorDevice,
       state,
       repository,
       builds,
@@ -2309,6 +2356,8 @@ async function main(): Promise<void> {
           allowUnsigned,
           wait,
           local,
+          simulator,
+          simulatorDevice,
           state,
           repository,
           builds,
@@ -2410,7 +2459,7 @@ void main()
   .catch((error: unknown) => {
     const message = error instanceof Error ? error.message : "Unknown error";
     const code = (error as { code?: string }).code ?? "CLI_ERROR";
-    const nextSteps = guidanceForError(error);
+    const nextSteps = guidanceForError(error, { args: rawArgs });
     if (json) {
       console.log(
         JSON.stringify({
@@ -2420,6 +2469,9 @@ void main()
             ? {
                 nextSteps: nextSteps.commands,
                 ...(nextSteps.note ? { note: nextSteps.note } : {}),
+                ...(nextSteps.environment
+                  ? { environment: nextSteps.environment }
+                  : {}),
               }
             : {}),
         }),

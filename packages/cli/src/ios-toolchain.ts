@@ -26,6 +26,8 @@ export interface IosToolchainReport {
   automaticSigning: boolean;
 }
 
+export type IosBuildTarget = "device" | "simulator";
+
 interface ProjectContext {
   path?: string;
   flag: "-workspace" | "-project";
@@ -140,10 +142,13 @@ async function probeProject(
   root: string,
   context: ProjectContext,
   profile: BuildProfile,
+  target: IosBuildTarget,
 ): Promise<ProjectContext> {
   if (!context.path || !context.scheme || !commandExists("xcodebuild"))
     return context;
-  const configuration = profile.ios?.configuration ?? "Release";
+  const configuration =
+    profile.ios?.configuration ??
+    (target === "simulator" ? "Debug" : "Release");
   const settings = await captureProcess(
     "xcodebuild",
     [
@@ -191,12 +196,14 @@ async function probeCommand(
 export async function inspectIosToolchain(
   root: string,
   profile: BuildProfile,
+  target: IosBuildTarget = "device",
 ): Promise<IosToolchainReport> {
   const checks: IosToolchainCheck[] = [];
   const isMac = platform() === "darwin";
   const host = findHost(root, profile);
   const hostExists = Boolean(host && existsSync(host));
   const scheme = profile.ios?.scheme;
+  const simulator = target === "simulator";
   const exportOptions = profile.ios?.exportOptionsPlist
     ? resolve(root, profile.ios.exportOptionsPlist)
     : undefined;
@@ -205,7 +212,9 @@ export async function inspectIosToolchain(
     check(
       "ios-platform",
       isMac ? "pass" : "fail",
-      isMac ? "macOS" : `${platform()} · macOS is required for an IPA`,
+      isMac
+        ? "macOS"
+        : `${platform()} · macOS is required for an iOS ${simulator ? "Simulator app" : "IPA"}`,
       isMac
         ? undefined
         : "Run the iOS build on a macOS machine or macOS CI runner",
@@ -299,8 +308,8 @@ export async function inspectIosToolchain(
     check(
       "ios-scheme",
       scheme ? "pass" : "fail",
-      scheme ?? "missing from the production build profile",
-      scheme ? undefined : "Set build.production.ios.scheme in lynxship.json",
+      scheme ?? "missing from the selected build profile",
+      scheme ? undefined : "Set ios.scheme in the selected build profile",
     ),
   );
 
@@ -312,6 +321,7 @@ export async function inspectIosToolchain(
       scheme,
     },
     profile,
+    target,
   );
   const settingsOutput = context.settings
     ? commandOutput(context.settings)
@@ -341,13 +351,17 @@ export async function inspectIosToolchain(
   checks.push(
     check(
       "apple-team",
-      context.settings?.code !== 0 || !context.settings
-        ? "warn"
-        : team
-          ? "pass"
-          : "fail",
-      team ?? "team not resolved from Xcode build settings",
-      team
+      simulator
+        ? "pass"
+        : context.settings?.code !== 0 || !context.settings
+          ? "warn"
+          : team
+            ? "pass"
+            : "fail",
+      simulator
+        ? "not required for iOS Simulator"
+        : (team ?? "team not resolved from Xcode build settings"),
+      simulator || team
         ? undefined
         : "Select the Apple Developer Team in Xcode Signing & Capabilities",
     ),
@@ -355,11 +369,17 @@ export async function inspectIosToolchain(
 
   const distribution =
     profile.distribution ?? profile.ios?.distribution ?? "store";
-  const identityResult = await (commandExists("security")
-    ? captureProcess("security", ["find-identity", "-v", "-p", "codesigning"], {
-        cwd: root,
-      })
-    : undefined);
+  const identityResult = simulator
+    ? undefined
+    : await (commandExists("security")
+        ? captureProcess(
+            "security",
+            ["find-identity", "-v", "-p", "codesigning"],
+            {
+              cwd: root,
+            },
+          )
+        : undefined);
   const identityOutput = identityResult ? commandOutput(identityResult) : "";
   const identityCount = Number(
     identityOutput.match(/(\d+) valid identities found/)?.[1] ?? 0,
@@ -369,15 +389,20 @@ export async function inspectIosToolchain(
   checks.push(
     check(
       "apple-signing-identity",
-      identityCount === 0 || !identityOutput.includes(requiredIdentity)
-        ? "fail"
-        : "pass",
-      identityCount === 0
-        ? "no valid code-signing identity found"
-        : identityOutput.includes(requiredIdentity)
-          ? `${requiredIdentity} identity available`
-          : `${requiredIdentity} identity not found`,
-      identityCount > 0 && identityOutput.includes(requiredIdentity)
+      simulator
+        ? "pass"
+        : identityCount === 0 || !identityOutput.includes(requiredIdentity)
+          ? "fail"
+          : "pass",
+      simulator
+        ? "not required for iOS Simulator"
+        : identityCount === 0
+          ? "no valid code-signing identity found"
+          : identityOutput.includes(requiredIdentity)
+            ? `${requiredIdentity} identity available`
+            : `${requiredIdentity} identity not found`,
+      simulator ||
+        (identityCount > 0 && identityOutput.includes(requiredIdentity))
         ? undefined
         : "Install or select the Apple certificate in Xcode Settings > Accounts, then rerun doctor",
     ),
@@ -421,24 +446,29 @@ export async function inspectIosToolchain(
   checks.push(
     check(
       "export-options",
-      !exportOptions
-        ? "fail"
-        : !existsSync(exportOptions)
+      simulator
+        ? "pass"
+        : !exportOptions
           ? "fail"
-          : !exportMethod || !supportedExportMethods.has(exportMethod)
+          : !existsSync(exportOptions)
             ? "fail"
-            : "pass",
-      !exportOptions
-        ? "missing from the production build profile"
-        : !existsSync(exportOptions)
-          ? `${exportOptions} not found`
-          : exportMethod && supportedExportMethods.has(exportMethod)
-            ? `method: ${exportMethod}`
-            : "method missing or invalid for an iOS export",
-      exportOptions &&
-        existsSync(exportOptions) &&
-        exportMethod &&
-        supportedExportMethods.has(exportMethod)
+            : !exportMethod || !supportedExportMethods.has(exportMethod)
+              ? "fail"
+              : "pass",
+      simulator
+        ? "not required for iOS Simulator"
+        : !exportOptions
+          ? "missing from the production build profile"
+          : !existsSync(exportOptions)
+            ? `${exportOptions} not found`
+            : exportMethod && supportedExportMethods.has(exportMethod)
+              ? `method: ${exportMethod}`
+              : "method missing or invalid for an iOS export",
+      simulator ||
+        (exportOptions &&
+          existsSync(exportOptions) &&
+          exportMethod &&
+          supportedExportMethods.has(exportMethod))
         ? undefined
         : "Set build.production.ios.exportOptionsPlist to a valid ExportOptions.plist",
     ),
@@ -454,21 +484,25 @@ export async function inspectIosToolchain(
   checks.push(
     check(
       "ios-provisioning",
-      manualProvisioning && !profilesAvailable
-        ? "fail"
-        : automaticSigning && !profilesAvailable
-          ? "warn"
-          : "pass",
-      manualProvisioning && !profilesAvailable
-        ? "manual signing selected but no local provisioning profile was found"
-        : automaticSigning && !profilesAvailable
-          ? "Xcode-managed provisioning will be requested during the build"
-          : profilesAvailable
-            ? "local provisioning profile available"
-            : "not required by the detected signing mode",
-      manualProvisioning && !profilesAvailable
-        ? "Download a matching .mobileprovision/.provisionprofile from Apple Developer and install it in Xcode"
-        : undefined,
+      simulator
+        ? "pass"
+        : manualProvisioning && !profilesAvailable
+          ? "fail"
+          : automaticSigning && !profilesAvailable
+            ? "warn"
+            : "pass",
+      simulator
+        ? "not required for iOS Simulator"
+        : manualProvisioning && !profilesAvailable
+          ? "manual signing selected but no local provisioning profile was found"
+          : automaticSigning && !profilesAvailable
+            ? "Xcode-managed provisioning will be requested during the build"
+            : profilesAvailable
+              ? "local provisioning profile available"
+              : "not required by the detected signing mode",
+      simulator || !(manualProvisioning && !profilesAvailable)
+        ? undefined
+        : "Download a matching .mobileprovision/.provisionprofile from Apple Developer and install it in Xcode",
     ),
   );
 
@@ -498,6 +532,25 @@ export async function inspectIosToolchain(
         : "Install the full Xcode toolchain, then rerun lynxship doctor --platform ios",
     ),
   );
+  if (simulator) {
+    const runtimeResult = await (commandExists("xcrun")
+      ? captureProcess("xcrun", ["simctl", "list", "runtimes"], { cwd: root })
+      : undefined);
+    const runtimeOutput = runtimeResult ? commandOutput(runtimeResult) : "";
+    const hasRuntime = /iOS\s+[0-9]/.test(runtimeOutput);
+    checks.push(
+      check(
+        "ios-simulator-runtime",
+        hasRuntime ? "pass" : "fail",
+        hasRuntime
+          ? "iOS Simulator runtime available"
+          : "no iOS Simulator runtime found",
+        hasRuntime
+          ? undefined
+          : "Open Xcode > Settings > Components and install an iOS Simulator runtime",
+      ),
+    );
+  }
 
   const failures = checks.filter((item) => item.status === "fail");
   return {

@@ -146,6 +146,18 @@ export function createLynxShipConfig(projectId = randomUUID()): string {
     {
       runtimeVersion: { policy: "fingerprint" },
       build: {
+        development: {
+          distribution: "development",
+          channel: "development",
+          environment: "development",
+          ios: { configuration: "Debug" },
+        },
+        simulator: {
+          distribution: "development",
+          channel: "development",
+          environment: "development",
+          ios: { configuration: "Debug", simulator: true },
+        },
         production: {
           distribution: "store",
           channel: "production",

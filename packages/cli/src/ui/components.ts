@@ -326,9 +326,14 @@ export function finalLine(message: string, success = true): void {
   console.log(`\n${success ? c.brand("◆") : c.red("◆")} ${c.text(message)}`);
 }
 
-export function nextSteps(commands: string[], note?: string): void {
+export function nextSteps(
+  commands: string[],
+  note?: string,
+  environment?: string,
+): void {
   if (commands.length === 0) return;
   console.error(`\n${c.yellow("Next steps")}`);
+  if (environment) console.error(`  ${c.muted(`Run on ${environment}:`)}`);
   commands.forEach((command, index) => {
     console.error(`  ${c.muted(`${index + 1}.`)} ${c.teal(command)}`);
   });

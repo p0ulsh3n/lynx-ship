@@ -78,6 +78,26 @@ test("configuration validates profiles and rejects unknown CI keys", () => {
     code: "CONFIG_UNKNOWN_KEY",
   });
 });
+
+test("simulator profile inherits the generated iOS host settings", () => {
+  const config = validateConfig({
+    projectId: "p",
+    build: {
+      production: {
+        ios: {
+          project: "ios/Test.xcodeproj",
+          scheme: "Test",
+          exportOptionsPlist: "ios/ExportOptions.plist",
+        },
+      },
+    },
+  });
+  const simulator = resolveProfile(config, "simulator");
+  assert.equal(simulator.ios?.simulator, true);
+  assert.equal(simulator.ios?.configuration, "Debug");
+  assert.equal(simulator.ios?.scheme, "Test");
+  assert.equal(simulator.ios?.exportOptionsPlist, "ios/ExportOptions.plist");
+});
 test("runtime fingerprint changes with native code and Lynx autolink manifests", async () => {
   const root = await mkdtemp(join(tmpdir(), "lynxship-runtime-"));
   await writeFile(

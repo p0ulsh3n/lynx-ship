@@ -9,6 +9,7 @@ import {
   resolveDesktopPackScript,
 } from "../packages/cli/src/desktop-build.js";
 import { inspectDesktopSigning } from "../packages/cli/src/desktop-signing.js";
+import { guidanceForError } from "../packages/cli/src/guidance.js";
 import { detectWebBuildScript } from "../packages/cli/src/web-build.js";
 
 function runCli(
@@ -125,6 +126,33 @@ test("TypeScript CLI init/build/update use persistent local state", async () => 
     await readFile(join(cwd, ".lynxship", ".env"), "utf8"),
     /POSTGRES_PASSWORD=/,
   );
+});
+
+test("auto-initializes a Vue Lynx project from its vue-lynx dependency", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-vue-lynx-"));
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({
+      name: "vue-lynx-app",
+      dependencies: { "vue-lynx": "0.5.1" },
+    }),
+  );
+  await writeFile(join(cwd, "package-lock.json"), "{}\n");
+
+  const result = await runCli(cwd, [
+    "build",
+    "--platform",
+    "android",
+    "--local",
+    "--json",
+  ]);
+
+  assert.equal(result.code, 0);
+  assert.equal(JSON.parse(result.stdout).state, "success");
+  const config = JSON.parse(
+    await readFile(join(cwd, "lynxship.json"), "utf8"),
+  ) as { projectId: string };
+  assert.match(config.projectId, /^[0-9a-f-]{36}$/);
 });
 
 test("build all creates one contract job for every supported Lynx target", async () => {
@@ -564,4 +592,68 @@ test("iOS doctor reports the macOS prerequisite before an iOS build", async () =
   );
   assert.equal(platformCheck?.status, "fail");
   assert.match(platformCheck?.value ?? "", /macOS/);
+});
+
+test("iOS Simulator local builds use the simulator profile without R2", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-ios-simulator-"));
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({ name: "ios-simulator" }),
+  );
+  await writeFile(join(cwd, "package-lock.json"), "{}\n");
+  const init = await runCli(cwd, ["init", "--non-interactive", "--json"]);
+  assert.equal(init.code, 0);
+  const build = await runCli(cwd, [
+    "build",
+    "--platform",
+    "ios",
+    "--simulator",
+    "--local",
+    "--json",
+  ]);
+  assert.equal(build.code, 0);
+  const result = JSON.parse(build.stdout) as {
+    state: string;
+    profile: string;
+  };
+  assert.equal(result.state, "success");
+  assert.equal(result.profile, "simulator");
+});
+
+test("guidance preserves the requested iOS Simulator platform", () => {
+  const guidance = guidanceForError(
+    { code: "PROFILE_NOT_FOUND", message: "profile missing" },
+    {
+      args: [
+        "build",
+        "--platform",
+        "ios",
+        "--simulator",
+        "--profile",
+        "development",
+      ],
+      hostPlatform: "win32",
+    },
+  );
+  assert.deepEqual(guidance.commands, [
+    "lynxship doctor --platform ios --profile simulator",
+    "lynxship build --platform ios --simulator --profile simulator --no-upload",
+  ]);
+  assert.ok(!guidance.commands.some((command) => command.includes("android")));
+  assert.match(guidance.note ?? "", /macOS/);
+  assert.equal(guidance.environment, "macOS or a macOS CI runner");
+});
+
+test("guidance keeps Android commands valid on macOS", () => {
+  const guidance = guidanceForError(
+    { code: "ANDROID_TOOLCHAIN_REQUIRED", message: "toolchain missing" },
+    { args: ["build", "--platform", "android"], hostPlatform: "darwin" },
+  );
+  assert.equal(guidance.commands[0], "lynxship doctor --platform android");
+  assert.ok(
+    guidance.commands.includes(
+      "lynxship build --platform android --profile production",
+    ),
+  );
+  assert.equal(guidance.environment, undefined);
 });

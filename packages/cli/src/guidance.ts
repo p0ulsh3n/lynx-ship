@@ -1,6 +1,12 @@
 export interface CliGuidance {
   commands: string[];
   note?: string;
+  environment?: string;
+}
+
+export interface GuidanceContext {
+  args?: readonly string[];
+  hostPlatform?: NodeJS.Platform;
 }
 
 const guidance: Record<string, CliGuidance> = {
@@ -228,6 +234,35 @@ const guidance: Record<string, CliGuidance> = {
     ],
     note: "The iOS doctor checks macOS, Xcode, xcrun, CocoaPods, Xcode settings, Apple signing identities, provisioning and export options without printing certificate contents.",
   },
+  IOS_SIMULATOR_PLATFORM: {
+    commands: [
+      "lynxship doctor --platform ios --profile simulator",
+      "lynxship build --platform ios --simulator --profile simulator --no-upload",
+    ],
+    note: "The iOS Simulator target is selected with --platform ios; Android, Web and Desktop targets cannot use this flag.",
+  },
+  IOS_SIMULATOR_RUNTIME_REQUIRED: {
+    commands: [
+      "xcode-select --install",
+      "lynxship doctor --platform ios --profile simulator",
+      "lynxship build --platform ios --simulator --profile simulator --no-upload",
+    ],
+    note: "Install an iOS Simulator runtime in Xcode > Settings > Components, then rerun the doctor.",
+  },
+  IOS_SIMULATOR_ARTIFACT_MISSING: {
+    commands: [
+      "lynxship doctor --platform ios --profile simulator",
+      "lynxship build --platform ios --simulator --profile simulator --no-upload",
+    ],
+    note: "The simulator build must produce an .app under DerivedData before it can be installed.",
+  },
+  IOS_SIMULATOR_UPLOAD_BLOCKED: {
+    commands: [
+      "lynxship build --platform ios --simulator --profile simulator --no-upload",
+      "lynxship build --platform ios --profile production",
+    ],
+    note: "Simulator .app artifacts stay local; use a signed production device build for R2 upload and distribution.",
+  },
   IOS_COCOAPODS_REQUIRED: {
     commands: ["brew install cocoapods", "lynxship build --platform ios"],
     note: "CocoaPods is required when the iOS host contains a Podfile.",
@@ -239,15 +274,20 @@ const guidance: Record<string, CliGuidance> = {
     ],
   },
   IOS_SCHEME_REQUIRED: {
-    commands: ["lynxship inspect", "lynxship doctor --platform ios"],
+    commands: [
+      "lynxship inspect",
+      "lynxship doctor --platform ios --profile simulator",
+      "lynxship doctor --platform ios --profile production",
+    ],
     note: "Set build.<profile>.ios.scheme in lynxship.json.",
   },
   IOS_EXPORT_OPTIONS_REQUIRED: {
     commands: [
       "lynxship ios host init --bundle-identifier com.example.myapp",
       "lynxship doctor --platform ios",
+      "lynxship build --platform ios --simulator --profile simulator --no-upload",
     ],
-    note: "Set build.<profile>.ios.exportOptionsPlist to a valid export options file.",
+    note: "Set build.<profile>.ios.exportOptionsPlist for a device IPA; simulator .app builds do not require export options.",
   },
   IOS_DEVICE_REQUIRED: {
     commands: [
@@ -370,7 +410,7 @@ const guidance: Record<string, CliGuidance> = {
   },
 };
 
-export function guidanceForError(error: unknown): CliGuidance {
+function guidanceForErrorBase(error: unknown): CliGuidance {
   const code = (error as { code?: unknown }).code;
   if (typeof code === "string" && guidance[code]) return guidance[code];
 
@@ -467,4 +507,124 @@ export function guidanceForError(error: unknown): CliGuidance {
     };
   }
   return { commands: [] };
+}
+
+type TargetPlatform = "android" | "ios" | "harmony" | "web" | "desktop" | "all";
+
+function argumentValue(
+  args: readonly string[],
+  name: string,
+): string | undefined {
+  const index = args.indexOf(name);
+  if (index >= 0) return args[index + 1];
+  const inline = args.find((value) => value.startsWith(`${name}=`));
+  return inline?.slice(name.length + 1);
+}
+
+function targetFromCode(code: string | undefined): TargetPlatform | undefined {
+  if (!code) return undefined;
+  if (code.startsWith("ANDROID_")) return "android";
+  if (code.startsWith("IOS_")) return "ios";
+  if (code.startsWith("HARMONY_")) return "harmony";
+  if (code.startsWith("WEB_")) return "web";
+  if (code.startsWith("DESKTOP_")) return "desktop";
+  if (code === "BUILD_ALL_MACOS_REQUIRED") return "all";
+  return undefined;
+}
+
+function targetFromCommand(command: string): TargetPlatform | undefined {
+  const match = command.match(
+    /--platform\s+(android|ios|harmony|web|desktop|all)/,
+  );
+  return match?.[1] as TargetPlatform | undefined;
+}
+
+function targetCommand(
+  platform: TargetPlatform,
+  simulator: boolean,
+  action: "doctor" | "build",
+): string {
+  if (platform === "all")
+    return action === "doctor"
+      ? "lynxship doctor --platform android"
+      : "lynxship build --platform all --profile production";
+  if (platform === "ios" && simulator) {
+    return action === "doctor"
+      ? "lynxship doctor --platform ios --profile simulator"
+      : "lynxship build --platform ios --simulator --profile simulator --no-upload";
+  }
+  if (action === "doctor") return `lynxship doctor --platform ${platform}`;
+  return `lynxship build --platform ${platform} --profile production`;
+}
+
+function adaptGuidance(
+  guidance: CliGuidance,
+  error: unknown,
+  context: GuidanceContext,
+): CliGuidance {
+  const code = (error as { code?: unknown }).code;
+  const errorCode = typeof code === "string" ? code : undefined;
+  const args = context.args ?? [];
+  const requested = argumentValue(args, "--platform") as
+    | TargetPlatform
+    | undefined;
+  const target = requested ?? targetFromCode(errorCode);
+  const simulator = args.includes("--simulator");
+  let commands = guidance.commands;
+
+  // Generic errors must preserve the platform the developer actually asked
+  // for. The old fallback to Android was misleading for iOS/Web/Desktop jobs.
+  if (
+    target &&
+    errorCode !== "BUILD_ALL_MACOS_REQUIRED" &&
+    ["BUILD_", "PROFILE_NOT_FOUND"].some((prefix) =>
+      errorCode?.startsWith(prefix),
+    )
+  ) {
+    commands = [
+      targetCommand(target, target === "ios" && simulator, "doctor"),
+      targetCommand(target, target === "ios" && simulator, "build"),
+    ];
+  }
+
+  const hostPlatform = context.hostPlatform ?? process.platform;
+  const macOnly = hostPlatform !== "darwin";
+  let requiredEnvironment: string | undefined;
+  commands = commands.map((command) => {
+    const commandTarget = targetFromCommand(command);
+    const isIosCommand =
+      commandTarget === "ios" ||
+      command.includes("ios host") ||
+      command.startsWith("xcode-select") ||
+      command.startsWith("xcrun ") ||
+      command.startsWith("brew ");
+    const isAllCommand = commandTarget === "all";
+    if (macOnly && isIosCommand) {
+      requiredEnvironment = "macOS or a macOS CI runner";
+      return command;
+    }
+    if (macOnly && isAllCommand) {
+      requiredEnvironment = "macOS or a macOS CI runner";
+      return command;
+    }
+    return command;
+  });
+
+  const notes = guidance.note ? [guidance.note] : [];
+  if (requiredEnvironment)
+    notes.push(
+      "These commands must be run on macOS or a macOS CI runner; Android remains supported on Windows, macOS and Linux.",
+    );
+  return {
+    commands,
+    note: notes.length > 0 ? notes.join(" ") : undefined,
+    environment: requiredEnvironment,
+  };
+}
+
+export function guidanceForError(
+  error: unknown,
+  context: GuidanceContext = {},
+): CliGuidance {
+  return adaptGuidance(guidanceForErrorBase(error), error, context);
 }

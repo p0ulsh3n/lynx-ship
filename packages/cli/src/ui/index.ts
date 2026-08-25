@@ -67,7 +67,7 @@ export class CliUi {
 
   nextSteps(guidance: CliGuidance): void {
     if (this.options.json || this.options.quiet) return;
-    nextSteps(guidance.commands, guidance.note);
+    nextSteps(guidance.commands, guidance.note, guidance.environment);
   }
 
   summary(title: string, rows: BoxRow[]): void {

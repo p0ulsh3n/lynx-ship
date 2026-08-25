@@ -216,6 +216,36 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
           popd
+      - name: Build and install the iOS Simulator app through LynxShip
+        shell: bash
+        run: |
+          output="$RUNNER_TEMP/lynxship-ios-simulator-build.json"
+          set +e
+          node packages/cli/dist/index.js build \
+            --project-dir examples/lynx-basic-template \
+            --platform ios \
+            --simulator \
+            --profile simulator \
+            --no-upload \
+            --non-interactive \
+            --json > "$output"
+          status=$?
+          set -e
+          cat "$output"
+          test "$status" -eq 0
+          BUILD_OUTPUT="$output" node <<'NODE'
+          const fs = require("node:fs");
+          const result = JSON.parse(fs.readFileSync(process.env.BUILD_OUTPUT, "utf8"));
+          if (result.state !== "success") {
+            throw new Error(`iOS Simulator build did not succeed: ${result.state}`);
+          }
+          if (!result.artifact?.path || !fs.existsSync(result.artifact.path)) {
+            throw new Error("LynxShip did not produce a local iOS Simulator artifact");
+          }
+          if (!result.artifact.path.endsWith(".app")) {
+            throw new Error(`Expected an iOS Simulator .app, received ${result.artifact.path}`);
+          }
+          NODE
       - name: Verify iOS host diagnostics
         shell: bash
         run: |

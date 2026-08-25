@@ -79,6 +79,38 @@ the resolved versions so later builds remain reproducible. The generator also
 adds `@lynxship/cli@latest` locally, so a global LynxShip installation is not
 required.
 
+### Vue Lynx projects
+
+Existing Vue Lynx projects are supported. Vue Lynx is a Vue 3 integration for
+Lynx that is configured as an Rspeedy plugin; LynxShip keeps that project-owned
+configuration and runs the project's package-manager `build` script. It does
+not replace `pluginVueLynx()` or rewrite `lynx.config.*` during a build.
+
+Create a Vue Lynx project with the official scaffold, then initialize LynxShip:
+
+```bash
+npm create vue-lynx@latest my-vue-lynx-app
+cd my-vue-lynx-app
+npm install
+npx @lynxship/cli@latest init
+npx @lynxship/cli@latest doctor
+npx @lynxship/cli@latest dev
+```
+
+For a native artifact, the project still needs the corresponding Android or
+iOS host. The Vue layer produces the Lynx bundle; the native host produces the
+APK/AAB or `.app`/IPA:
+
+```bash
+npx @lynxship/cli@latest build --platform android --profile production
+# macOS only, iOS Simulator without distribution signing:
+npx @lynxship/cli@latest build --platform ios --simulator --no-upload
+```
+
+The official Vue Lynx plugin remains in the project's Rspeedy configuration,
+for example `pluginVueLynx()` in `lynx.config.ts`. Keep its versions and the
+project lockfile together so builds remain reproducible.
+
 To intentionally upgrade an existing project's Lynx/Rspeedy dependencies,
 follow the official upgrader workflow:
 
@@ -334,6 +366,18 @@ lynxship doctor --platform ios
 lynxship build --platform ios --profile production
 ```
 
+For an iOS Simulator build on macOS, use the simulator profile. This produces
+and installs a local `.app`; it does not require a physical iPhone, Apple
+Distribution certificate, provisioning profile or R2 upload:
+
+```bash
+lynxship doctor --platform ios --profile simulator
+lynxship build --platform ios --simulator --profile simulator --no-upload
+```
+
+The simulator build uses Xcode's `iphonesimulator` SDK and `simctl`. Use the
+production profile only when creating a signed device IPA.
+
 Before an iOS build, `lynxship doctor --platform ios` checks macOS, the active
 Xcode developer directory, Xcode/`xcodebuild`, `xcrun`, `codesign`, `unzip`, the
 Xcode host and scheme, build settings, Apple team, signing identity, CocoaPods
@@ -342,7 +386,7 @@ It never prints certificate or profile contents. On a Mac, Xcode contains
 `xcodebuild` and `xcrun`; the standalone Command Line Tools package alone is
 not sufficient for an Xcode archive.
 
-The first real build installs CocoaPods dependencies automatically. Xcode,
+The first real device build installs CocoaPods dependencies automatically. Xcode,
 CocoaPods and real Apple signing credentials are still required for a signed
 IPA; LynxShip never invents Apple certificates or provisioning profiles.
 
@@ -723,8 +767,11 @@ The repository workflow also runs an iOS job on a pinned GitHub-hosted
 `macos-15` runner. It checks the Xcode toolchain, compiles the official
 `HelloLynxSwift` simulator fixture, and verifies that a project without an iOS
 native host fails with `IOS_HOST_REQUIRED` instead of producing a fake
-artifact. A real signed IPA job additionally requires an iOS Xcode host, Apple
-certificates/provisioning and protected App Store Connect credentials.
+artifact. It then generates a LynxShip iOS host and runs
+`build --platform ios --simulator --profile simulator --no-upload` through the
+CLI, verifying the produced and installed `.app`. A real signed IPA job
+additionally requires an iOS Xcode host, Apple certificates/provisioning and
+protected App Store Connect credentials.
 
 For GitHub Actions, store R2 values as repository secrets named
 `LYNXSHIP_R2_ACCOUNT_ID`, `LYNXSHIP_R2_BUCKET`, `LYNXSHIP_R2_ACCESS_KEY_ID` and

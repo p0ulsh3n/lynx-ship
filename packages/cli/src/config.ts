@@ -10,6 +10,7 @@ export interface BuildProfile {
   ios?: {
     configuration?: string;
     distribution?: string;
+    simulator?: boolean;
     workspace?: string;
     project?: string;
     scheme?: string;
@@ -57,6 +58,18 @@ export interface LynxShipConfig {
 export const DEFAULT_CONFIG: LynxShipConfig = {
   runtimeVersion: { policy: "fingerprint" },
   build: {
+    development: {
+      distribution: "development",
+      channel: "development",
+      environment: "development",
+      ios: { configuration: "Debug" },
+    },
+    simulator: {
+      distribution: "development",
+      channel: "development",
+      environment: "development",
+      ios: { configuration: "Debug", simulator: true },
+    },
     production: {
       distribution: "store",
       channel: "production",
@@ -145,9 +158,20 @@ export function resolveProfile(
   config: LynxShipConfig,
   name = "production",
 ): BuildProfile & { name: string } {
-  const profile = config.build?.[name];
+  const profile = config.build?.[name] ?? DEFAULT_CONFIG.build?.[name];
   assert(profile, "PROFILE_NOT_FOUND", `Build profile '${name}' was not found`);
-  return { name, ...profile };
+  const inherited = DEFAULT_CONFIG.build?.[name] ?? {};
+  const productionIos = config.build?.production?.ios ?? {};
+  return {
+    name,
+    ...inherited,
+    ...profile,
+    ios: {
+      ...(inherited.ios ?? {}),
+      ...(name !== "production" ? productionIos : {}),
+      ...(profile.ios ?? {}),
+    },
+  };
 }
 
 export function platformValue(value: string): Platform {
