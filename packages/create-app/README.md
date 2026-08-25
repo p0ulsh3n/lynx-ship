@@ -1,0 +1,75 @@
+# create-lynxship-app
+
+Create a new LynxJS application using the official `create-rspeedy` template,
+then add the LynxShip project metadata needed for development and builds.
+
+## Usage
+
+```bash
+npx create-lynxship-app@latest my-lynx-app
+```
+
+Or:
+
+```bash
+npm create lynxship-app@latest my-lynx-app
+pnpm create lynxship-app@latest my-lynx-app
+```
+
+The generator creates a ReactLynx TypeScript application by default. It uses
+the official `create-rspeedy@latest` package, so new projects receive the
+current stable Lynx/Rspeedy template published by the Lynx team. It does not
+copy or reimplement the Lynx template.
+
+It also adds `@lynxship/cli@latest` as a local development dependency. No
+global LynxShip installation is required for the generated project.
+
+## Options
+
+```text
+--template react-ts    TypeScript ReactLynx template (default)
+--template react-js    JavaScript ReactLynx template
+--dir <directory>      Explicit target directory
+--no-install           Skip dependency installation
+--no-git               Skip Git initialization by create-rspeedy
+```
+
+After generation, the project contains:
+
+- the official Rspeedy/Lynx project structure;
+- a unique UUID v4 in `lynxship.json`;
+- an ignored `.lynxship/` state directory;
+- `LYNXSHIP.md` with the first development and build commands.
+
+## First commands
+
+```bash
+cd my-lynx-app
+npx lynxship doctor
+npx lynxship dev
+```
+
+The development server provides the QR/HMR workflow for Lynx Explorer. A
+production APK or IPA still requires the corresponding official native host,
+platform SDK and signing configuration:
+
+```bash
+npx lynxship build --platform android --profile production
+npx lynxship build --platform ios --profile production
+```
+
+This package does not replace `create-rspeedy`, generate a fictional native
+runtime, or overwrite an existing directory.
+
+The generated project records the resolved framework versions in its package
+manager lockfile. Existing projects are not silently upgraded during every
+build. To intentionally upgrade an existing project, use the official
+Rspeedy upgrader and then run the project's package-manager install command:
+
+```bash
+pnpm dlx upgrade-rspeedy@latest
+pnpm install
+```
+
+Use the equivalent `npx`, `yarn dlx`, or `bunx` command when using another
+package manager.

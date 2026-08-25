@@ -9,6 +9,8 @@ const required = [
   "packages/api/package.json",
   "packages/api/dist/server.js",
   "packages/cli/package.json",
+  "packages/create-app/package.json",
+  "packages/create-app/dist/index.js",
   "packages/dashboard/package.json",
   "packages/dashboard/vite.config.ts",
   "packages/dashboard/dist/index.html",

@@ -178,6 +178,8 @@ importers:
 
   packages/contracts: {}
 
+  packages/create-app: {}
+
   packages/dashboard:
     dependencies:
       '@radix-ui/react-slot':

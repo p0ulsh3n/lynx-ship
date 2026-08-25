@@ -56,6 +56,37 @@ Or run it without a global install:
 npx @lynxship/cli doctor --project-dir ./my-lynx-app
 ```
 
+### Create a new LynxJS project
+
+For a new application, use the standalone generator. It delegates the
+framework scaffold to the official `create-rspeedy` package, then adds the
+LynxShip project metadata:
+
+```bash
+npx create-lynxship-app@latest my-lynx-app
+cd my-lynx-app
+npx lynxship doctor
+npx lynxship dev
+```
+
+The generator creates a ReactLynx TypeScript project by default. Use
+`--template react-js` for JavaScript, `--no-install` to defer dependency
+installation, or `--dir <path>` to choose an explicit empty directory. It
+never overwrites a non-empty directory and does not invent a native host.
+For an existing LynxJS project, use `lynxship init` instead. New projects use
+the current stable `create-rspeedy@latest` template; their lockfile records
+the resolved versions so later builds remain reproducible. The generator also
+adds `@lynxship/cli@latest` locally, so a global LynxShip installation is not
+required.
+
+To intentionally upgrade an existing project's Lynx/Rspeedy dependencies,
+follow the official upgrader workflow:
+
+```bash
+pnpm dlx upgrade-rspeedy@latest
+pnpm install
+```
+
 ### Initialize a LynxJS project
 
 ```bash
@@ -735,6 +766,7 @@ this repository. Maintainers publishing a new version should run:
 ```bash
 npm login
 pnpm --filter @lynxship/cli... build
+pnpm --filter create-lynxship-app build
 cd packages/cli
 npm pack --dry-run
 cd ../..
@@ -746,6 +778,7 @@ organization. Verify the published result with:
 
 ```bash
 npm view @lynxship/cli version
+npm view create-lynxship-app version
 npm install --global @lynxship/cli@latest
 ```
 
@@ -753,6 +786,7 @@ npm install --global @lynxship/cli@latest
 
 ```text
 packages/cli                  Terminal CLI and release workflows
+packages/create-app           Standalone create-lynxship-app generator
 packages/api                  Fastify control-plane API
 packages/dashboard            React/TanStack/Tailwind dashboard
 packages/sdk-android          Android OTA client
