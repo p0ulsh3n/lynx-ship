@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
-export const CREATE_APP_VERSION = "0.1.1";
+export const CREATE_APP_VERSION = "0.1.2";
 
 export const RSPEEDY_VERSION = "latest";
 
@@ -414,8 +414,19 @@ export async function main(args = process.argv.slice(2)): Promise<void> {
   await createApp(options);
 }
 
-const entrypoint = process.argv[1] ? resolve(process.argv[1]) : undefined;
-if (entrypoint === fileURLToPath(import.meta.url)) {
+function isCliEntrypoint(): boolean {
+  const invokedPath = process.argv[1];
+  if (!invokedPath) return false;
+
+  const modulePath = fileURLToPath(import.meta.url);
+  try {
+    return realpathSync(invokedPath) === realpathSync(modulePath);
+  } catch {
+    return resolve(invokedPath) === resolve(modulePath);
+  }
+}
+
+if (isCliEntrypoint()) {
   main().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`\nx ${message}`);
