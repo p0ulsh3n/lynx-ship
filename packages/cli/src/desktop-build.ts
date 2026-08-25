@@ -170,6 +170,7 @@ export async function runRealDesktopBuild(
       await buildLynxBundle(options.root, {
         quiet: options.quiet,
         onOutput: options.onEvent,
+        miso: options.profile.miso,
       });
     }
     transitionBuild(job, "queued", "Desktop build queued locally");

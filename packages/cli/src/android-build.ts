@@ -320,6 +320,7 @@ export async function runRealAndroidBuild(
       await buildLynxBundle(options.root, {
         env: environment,
         ...processOptions,
+        miso: options.profile.miso,
       });
     }
     step("Rspeedy bundle ready", 20);

@@ -225,6 +225,7 @@ export async function runRealHarmonyBuild(
       await buildLynxBundle(options.root, {
         quiet: options.quiet,
         onOutput: options.onEvent,
+        miso: options.profile.miso,
       });
     }
     step("Syncing bundle into the HarmonyOS HAP resources…", 20);

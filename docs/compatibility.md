@@ -5,6 +5,27 @@ and the current Node 26 release. The doctor flags odd-numbered EOL releases
 such as Node 25; production workers must pin a tested Active or Maintenance
 LTS image/version instead of silently changing runtime underneath a build.
 
+## Framework adapters
+
+LynxShip detects the framework from project-owned package and configuration
+files and keeps the native host pipeline shared:
+
+- ReactLynx, Vue Lynx and Vanilla Lynx use the project's pinned Rspeedy
+  command and configuration.
+- Octane uses the official @octanejs/rspeedy-plugin integration when the
+  project provides it. The official Octane Lynx docs currently label native
+  support early access and say the Lynx packages are not published yet, so
+  LynxShip reports that boundary instead of installing an invented version.
+- Miso uses the upstream Haskell/Nix flake. LynxShip uses the flake's default
+  or bundle output when it exposes one, and accepts
+  build.<profile>.miso.attribute for custom outputs. It runs nix build, verifies
+  result/main.lynx.bundle (or the configured artifact), and copies it into
+  dist/ before the native host build.
+
+The framework detector is advisory for ReactLynx, Vue and Vanilla Lynx, and
+enforces the required Nix/bundle boundary for Miso. A successful bundle build
+does not imply that an experimental framework is production-ready.
+
 ## Automatic native compatibility
 
 The CLI computes a deterministic runtime fingerprint for every build and OTA

@@ -22,6 +22,7 @@
         "packages/cli/src/runtime-fingerprint.ts"
       ],
       "@lynxship/cli/autolink": ["packages/cli/src/autolink.ts"],
+      "@lynxship/cli/frameworks": ["packages/cli/src/frameworks.ts"],
       "@lynxship/cli/ui/*": ["packages/cli/src/ui/*"],
       "@lynxship/contracts": ["packages/contracts/src/index.ts"],
       "@lynxship/db": ["packages/db/src/index.ts"],

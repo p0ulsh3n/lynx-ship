@@ -58,3 +58,42 @@ instead of inventing an installer.
   installer files, hashes from one workstation, or R2 URLs.
 - Do not disable signing for a production or uploaded build.
 - Record a new validation commit when a fixture or its toolchain changes.
+
+## Framework fixtures
+
+### Octane Lynx
+
+- Official docs: https://octanejs.dev/docs/lynx
+- Official source: https://github.com/octanejs/octane
+- Fixture notes: examples/lynx-octane-fixture/README.md
+
+The official page currently says that @octanejs/lynx and
+@octanejs/rspeedy-plugin are not published and that native support is early
+access. Validation must therefore run from a pinned Octane checkout:
+
+```bash
+git clone https://github.com/octanejs/octane.git
+cd octane
+# The official documentation uses `pnpm install`. A focused install is enough
+# for this development smoke test and avoids installing unrelated workspaces.
+pnpm install --filter @octanejs/rspeedy-plugin... --frozen-lockfile
+pnpm --filter @octanejs/rspeedy-plugin exec rspeedy dev \
+  --root examples/gallery --environment lynx
+```
+
+This proves the real Octane/Rspeedy/Lynx development path. It is not a claim
+of signed Android or iOS production support.
+
+### Miso Native
+
+- Historical repository: https://github.com/haskell-miso/miso-lynx
+- Current native API: https://haddocks.haskell-miso.org/miso/Miso-Native.html
+- Fixture notes: examples/miso-lynx-fixture/README.md
+
+The project is Haskell/Nix and its current official gallery is built with
+nix build (the flake exposes both default and bundle outputs). LynxShip
+detects this shape, requires Nix, and uses the default/bundle output or the
+configured build.<profile>.miso.attribute and build.<profile>.miso.artifact
+values. Miso's native backend remains
+experimental, and the dual-thread restrictions must be validated separately
+from the bundle build.

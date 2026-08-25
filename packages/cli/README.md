@@ -14,13 +14,13 @@ expiring download URL with a compact terminal QR code.
 ## Install
 
 ```bash
-npm install --global @lynxship/cli
+npm install --global @lynxship/cli@latest
 ```
 
 Or run it without a global install:
 
 ```bash
-npx @lynxship/cli doctor --project-dir ./my-lynx-app
+npx @lynxship/cli@latest doctor --project-dir ./my-lynx-app
 ```
 
 The package exposes the `lynxship` executable.
@@ -51,6 +51,34 @@ npx @lynxship/cli@latest build --platform ios --simulator --no-upload
 The CLI generator itself creates ReactLynx templates by default. Use the
 official `create-vue-lynx` scaffold when Vue is required, then add LynxShip to
 that existing project with `init`.
+
+## Octane and Miso
+
+LynxShip detects Octane and Miso projects without replacing their
+project-owned configuration.
+
+Octane uses the official `@octanejs/rspeedy-plugin`. The Lynx integration is
+still early access and its Lynx packages are not currently published on npm,
+so development validation must use the official Octane repository and its
+pnpm workspace:
+
+```bash
+git clone https://github.com/octanejs/octane.git
+cd octane
+pnpm install --filter @octanejs/rspeedy-plugin... --frozen-lockfile
+pnpm --filter @octanejs/rspeedy-plugin exec rspeedy dev \
+  --root examples/gallery --environment lynx
+```
+
+Miso uses the official Haskell/Nix flake rather than an npm build script.
+Install Nix and the project's Haskell toolchain, then let LynxShip use the
+flake's `default`/`bundle` output or configure a project-specific output in
+`lynxship.json`. Miso remains experimental; a successful bundle does not
+prove a signed Android or iOS production build.
+
+See the source-verified fixture notes in the repository's
+`examples/lynx-octane-fixture` and `examples/miso-lynx-fixture` directories,
+plus `docs/compatibility.md`.
 
 ## Requirements
 
@@ -486,9 +514,10 @@ actual recording and analysis.
 
 ## Package layout
 
-The CLI is backed by the public `@lynxship/*` runtime packages in this
-workspace. They are published with the same version and must be available in
-the configured npm scope before installing the CLI package.
+The CLI is backed by public `@lynxship/*` runtime packages in this workspace.
+Their published versions may differ from the CLI version; workspace ranges are
+rewritten to released versions when the package is packed. Publish a changed
+runtime package before publishing the CLI when its source or version changed.
 
 ## License
 

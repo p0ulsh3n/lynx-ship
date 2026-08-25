@@ -106,6 +106,7 @@ export async function runRealWebBuild(
         quiet: options.quiet,
         onOutput: options.onEvent,
         script,
+        miso: options.profile.miso,
         rspeedyArgs: script
           ? undefined
           : ["--environment", options.profile.web?.environment ?? "web"],

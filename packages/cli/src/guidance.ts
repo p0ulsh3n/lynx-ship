@@ -116,6 +116,28 @@ const guidance: Record<string, CliGuidance> = {
     ],
     note: "Configure environments.web in lynx.config.* or provide the project's build:web script.",
   },
+  BUILD_MISO_NIX_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform android",
+      "nix --version",
+      "lynxship build --platform android --profile production",
+    ],
+    note: "Install Nix and use the project's flake to build the Miso Lynx bundle.",
+  },
+  BUILD_MISO_ATTRIBUTE_REQUIRED: {
+    commands: [
+      "lynxship init",
+      "lynxship build --platform android --profile production",
+    ],
+    note: "Expose a default/mkLynxBundle output or set build.production.miso.attribute to the Nix flake output that creates main.lynx.bundle.",
+  },
+  BUILD_MISO_BUNDLE_MISSING: {
+    commands: [
+      "nix build",
+      "lynxship build --platform android --profile production",
+    ],
+    note: "Check build.production.miso.artifact and the output produced by the Miso flake.",
+  },
   WEB_BUNDLE_MISSING: {
     commands: [
       "lynxship doctor --platform web",

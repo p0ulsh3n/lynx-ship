@@ -95,11 +95,11 @@ export class CliUi {
     downloadArtifact(url, expiresAt, this.interactive);
   }
 
-  devServerQr(url: string): void {
+  async devServerQr(url: string): Promise<void> {
     // Rspeedy suppresses its own QR when its stdout is piped. LynxShip
     // captures that output, so render the fallback unless the caller asked
     // for machine JSON, quiet output, or an explicitly non-interactive run.
-    devServerQr(
+    await devServerQr(
       url,
       !this.options.json && !this.options.quiet && !this.options.nonInteractive,
     );

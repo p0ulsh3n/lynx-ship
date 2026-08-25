@@ -87,7 +87,6 @@ test("CLI extracts the Lynx Explorer QR URL from Rspeedy output", () => {
 test("CLI QR uses the WISA renderer settings with LynxShip branding", async () => {
   const rendered = await renderTerminalQr(
     "lynx://localhost:3000/main.lynx.bundle",
-    true,
   );
   assert.equal(LYNXSHIP_QR_STYLE.qrOptions.errorCorrectionLevel, "H");
   assert.equal(LYNXSHIP_QR_STYLE.dotsOptions.type, "dots");

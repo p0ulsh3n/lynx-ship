@@ -21,7 +21,7 @@ OTA is fail-closed until its non-secret public configuration is supplied as
 Gradle properties or environment variables:
 
 ```powershell
-$env:LYNXSHIP_OTA_ENDPOINT = "https://api.example.com"
+$env:LYNXSHIP_OTA_ENDPOINT = "https://api.example.invalid"
 $env:LYNXSHIP_OTA_PROJECT_ID = "lynxship_android_demo"
 $env:LYNXSHIP_RUNTIME_VERSION = "fp-..."
 $env:LYNXSHIP_OTA_PUBLIC_KEY_ID = "key-..."

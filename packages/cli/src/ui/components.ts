@@ -355,13 +355,23 @@ export function downloadArtifact(
   if (expiresAt) console.log(`  ${c.muted(`Link expires at ${expiresAt}`)}`);
 }
 
-export function devServerQr(url: string, enabled = true): void {
+export async function devServerQr(url: string, enabled = true): Promise<void> {
   if (!enabled) return;
-  console.log(`\n${c.brandBold("Lynx Explorer")}`);
+  const rail = c.teal("│");
+  const printRail = (value = ""): void => console.log(`  ${rail}${value}`);
+  printRail();
+  printRail(` ${c.brandBold("Lynx Explorer")}`);
   if (colorsEnabled && supportsUnicode()) {
-    console.log(renderTerminalQr(url, true));
+    (await renderTerminalQr(url))
+      .split("\n")
+      .forEach((line) => printRail(` ${line}`));
   } else {
-    qrcode.generate(url, { small: true }, (code) => console.log(code));
+    qrcode.generate(url, { small: true }, (code) => {
+      code.split("\n").forEach((line) => printRail(` ${line}`));
+    });
   }
-  console.log(`  ${c.teal("URL")}  ${url}\n`);
+  printRail();
+  printRail(` ${c.teal("URL")}  ${url}`);
+  printRail();
+  console.log();
 }

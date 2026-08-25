@@ -1,6 +1,6 @@
 {
   "name": "@lynxship/cli",
-  "version": "0.1.14",
+  "version": "0.1.16",
   "description": "Build, sign, store, submit and update LynxJS applications from the terminal.",
   "type": "module",
   "license": "MIT",
@@ -54,6 +54,10 @@
       "types": "./dist/autolink.d.ts",
       "import": "./dist/autolink.js"
     },
+    "./frameworks": {
+      "types": "./dist/frameworks.d.ts",
+      "import": "./dist/frameworks.js"
+    },
     "./ui/*": {
       "types": "./dist/ui/*.d.ts",
       "import": "./dist/ui/*.js"
@@ -77,12 +81,15 @@
     "chalk": "5.4.1",
     "cli-progress": "3.12.0",
     "ora": "8.2.0",
-    "qrcode-generator": "1.4.4",
     "qrcode-terminal": "0.12.0",
-    "qr-code-styling": "1.9.2"
+    "qr-code-styling": "1.9.2",
+    "@resvg/resvg-js": "2.6.2",
+    "jsdom": "29.1.1",
+    "pngjs": "7.0.0"
   },
   "devDependencies": {
     "@types/cli-progress": "3.11.6",
+    "@types/pngjs": "6.0.4",
     "@types/qrcode-terminal": "0.12.2"
   }
 }

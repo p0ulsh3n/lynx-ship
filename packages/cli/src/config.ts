@@ -6,6 +6,10 @@ export interface BuildProfile {
   distribution?: string;
   channel?: string;
   environment?: string;
+  miso?: {
+    attribute?: string;
+    artifact?: string;
+  };
   android?: { artifact?: string };
   ios?: {
     configuration?: string;

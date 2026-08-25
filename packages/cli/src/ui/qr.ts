@@ -1,5 +1,6 @@
-import qrcodeGenerator from "qrcode-generator";
 import { LYNX_BRAND } from "./colors.js";
+import { terminalWidth } from "./terminal.js";
+import { createRequire } from "node:module";
 
 export const LYNXSHIP_QR_STYLE = {
   type: "svg",
@@ -43,111 +44,211 @@ export const LYNXSHIP_QR_STYLE = {
   backgroundOptions: { color: "#FFFFFF" },
 } as const;
 
-interface QrMatrix {
-  addData(data: string, mode?: string): void;
-  make(): void;
-  getModuleCount(): number;
-  isDark(row: number, column: number): boolean;
+interface StyledQr {
+  getRawData(extension: "svg"): Promise<Buffer | Uint8Array | null>;
 }
 
-type Rgb = [number, number, number];
+interface StyledQrConstructor {
+  new (options: Record<string, unknown>): StyledQr;
+}
 
-const QUIET_ZONE = 2;
-const RESET = "\u001b[0m";
-const WHITE_BACKGROUND = "\u001b[48;2;255;255;255m";
+interface ResvgConstructor {
+  new (svg: string): {
+    render(): {
+      asPng(): Uint8Array;
+    };
+  };
+}
 
-function hexToRgb(hex: string): Rgb {
-  const value = hex.replace("#", "");
+interface PngImage {
+  width: number;
+  height: number;
+  data: Uint8Array;
+}
+
+interface PngDecoder {
+  sync: {
+    read(buffer: Buffer): PngImage;
+  };
+}
+
+interface JSDomConstructor {
+  new (...args: unknown[]): unknown;
+}
+
+interface RuntimeQrDependencies {
+  QRCodeStyling: StyledQrConstructor;
+  JSDOM: JSDomConstructor;
+  Resvg: ResvgConstructor;
+  PNG: PngDecoder;
+}
+
+async function loadDependencies(): Promise<RuntimeQrDependencies> {
+  const require = createRequire(import.meta.url);
+  const qrModule = require("qr-code-styling") as
+    | { default?: StyledQrConstructor }
+    | StyledQrConstructor;
+  const jsdomModule = require("jsdom") as { JSDOM: JSDomConstructor };
+  const resvgModule = require("@resvg/resvg-js") as {
+    Resvg: ResvgConstructor;
+  };
+  const pngModule = require("pngjs") as { PNG: PngDecoder };
+  return {
+    QRCodeStyling:
+      "default" in qrModule && qrModule.default
+        ? qrModule.default
+        : (qrModule as StyledQrConstructor),
+    JSDOM: jsdomModule.JSDOM,
+    Resvg: resvgModule.Resvg,
+    PNG: pngModule.PNG,
+  };
+}
+
+function ansiColor(
+  channel: "38" | "48",
+  red: number,
+  green: number,
+  blue: number,
+): string {
+  return "\u001b[" + channel + ";2;" + red + ";" + green + ";" + blue + "m";
+}
+
+function pixelAt(
+  image: PngImage,
+  x: number,
+  y: number,
+): [number, number, number, number] {
+  const offset = (y * image.width + x) * 4;
   return [
-    Number.parseInt(value.slice(0, 2), 16),
-    Number.parseInt(value.slice(2, 4), 16),
-    Number.parseInt(value.slice(4, 6), 16),
+    image.data[offset] ?? 255,
+    image.data[offset + 1] ?? 255,
+    image.data[offset + 2] ?? 255,
+    image.data[offset + 3] ?? 255,
   ];
 }
 
-function colorAt(row: number, column: number, size: number): Rgb {
-  const angle = LYNXSHIP_QR_STYLE.dotsOptions.gradient.rotation;
-  const x = size <= 1 ? 0 : column / (size - 1);
-  const y = size <= 1 ? 0 : row / (size - 1);
-  const projection = x * Math.cos(angle) + y * Math.sin(angle);
-  const minimum = Math.min(0, Math.cos(angle), Math.sin(angle));
-  const maximum = Math.max(0, Math.cos(angle), Math.sin(angle));
-  const ratio = Math.max(
-    0,
-    Math.min(1, (projection - minimum) / (maximum - minimum)),
-  );
-  const start = hexToRgb(
-    LYNXSHIP_QR_STYLE.dotsOptions.gradient.colorStops[0].color,
-  );
-  const end = hexToRgb(
-    LYNXSHIP_QR_STYLE.dotsOptions.gradient.colorStops[1].color,
-  );
-  return [
-    Math.round(start[0] + (end[0] - start[0]) * ratio),
-    Math.round(start[1] + (end[1] - start[1]) * ratio),
-    Math.round(start[2] + (end[2] - start[2]) * ratio),
-  ];
+function isBackground([red, green, blue, alpha]: [
+  number,
+  number,
+  number,
+  number,
+]): boolean {
+  return alpha < 16 || (red > 248 && green > 248 && blue > 248);
 }
 
-function ansiForeground([red, green, blue]: Rgb): string {
-  return `\u001b[38;2;${red};${green};${blue}m`;
+function cropToQrContent(image: PngImage): PngImage {
+  let left = image.width;
+  let top = image.height;
+  let right = -1;
+  let bottom = -1;
+
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      if (!isBackground(pixelAt(image, x, y))) {
+        left = Math.min(left, x);
+        top = Math.min(top, y);
+        right = Math.max(right, x);
+        bottom = Math.max(bottom, y);
+      }
+    }
+  }
+
+  if (right < left || bottom < top) return image;
+
+  const padding = Math.max(
+    3,
+    Math.round(Math.min(image.width, image.height) * 0.02),
+  );
+  const cropLeft = Math.max(0, left - padding);
+  const cropTop = Math.max(0, top - padding);
+  const cropRight = Math.min(image.width - 1, right + padding);
+  const cropBottom = Math.min(image.height - 1, bottom + padding);
+  const width = cropRight - cropLeft + 1;
+  const height = cropBottom - cropTop + 1;
+  const data = new Uint8Array(width * height * 4);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const source = ((cropTop + y) * image.width + cropLeft + x) * 4;
+      const target = (y * width + x) * 4;
+      data[target] = image.data[source] ?? 255;
+      data[target + 1] = image.data[source + 1] ?? 255;
+      data[target + 2] = image.data[source + 2] ?? 255;
+      data[target + 3] = image.data[source + 3] ?? 255;
+    }
+  }
+
+  return { width, height, data };
 }
 
-function moduleAt(
-  matrix: QrMatrix,
-  row: number,
-  column: number,
-  size: number,
-): boolean {
-  if (
-    row < QUIET_ZONE ||
-    column < QUIET_ZONE ||
-    row >= size + QUIET_ZONE ||
-    column >= size + QUIET_ZONE
-  )
-    return false;
-  return matrix.isDark(row - QUIET_ZONE, column - QUIET_ZONE);
+function renderRasterInTerminal(image: PngImage): string {
+  const columns = Math.max(35, Math.min(72, terminalWidth() - 8));
+  const scale = image.width / columns;
+  const rows = Math.ceil(image.height / scale / 2);
+  const lines: string[] = [];
+  const whiteBackground = ansiColor("48", 255, 255, 255);
+  const reset = "\u001b[0m";
+
+  for (let row = 0; row < rows; row += 1) {
+    const topY = Math.min(image.height - 1, Math.floor(row * 2 * scale));
+    const bottomY = Math.min(
+      image.height - 1,
+      Math.floor((row * 2 + 1) * scale),
+    );
+    let line = whiteBackground;
+    for (let column = 0; column < columns; column += 1) {
+      const x = Math.min(image.width - 1, Math.floor(column * scale));
+      const top = pixelAt(image, x, topY);
+      const bottom = pixelAt(image, x, bottomY);
+      const topBackground = isBackground(top);
+      const bottomBackground = isBackground(bottom);
+
+      if (topBackground && bottomBackground) {
+        line += " ";
+      } else if (!topBackground && bottomBackground) {
+        line +=
+          ansiColor("38", top[0], top[1], top[2]) +
+          ansiColor("48", 255, 255, 255) +
+          "▀";
+      } else if (topBackground && !bottomBackground) {
+        line +=
+          ansiColor("38", bottom[0], bottom[1], bottom[2]) +
+          ansiColor("48", 255, 255, 255) +
+          "▄";
+      } else {
+        line +=
+          ansiColor("38", top[0], top[1], top[2]) +
+          ansiColor("48", bottom[0], bottom[1], bottom[2]) +
+          "▀";
+      }
+    }
+    lines.push(line + reset);
+  }
+  return lines.join("\n");
 }
 
 /**
- * Render the same QR styling tokens as qr-code-styling in a terminal.
- *
- * qr-code-styling produces SVG/canvas output, which a normal terminal cannot
- * display. The terminal adapter therefore uses its public QR matrix engine
- * and applies the exact shared ECC, gradient, rotation and quiet-zone values.
+ * Generate the QR with qr-code-styling itself, exactly like the WISA renderer.
+ * The SVG is then rasterized only to make the library's real rounded shapes
+ * displayable in a normal terminal; no QR modules are recreated by LynxShip.
  */
-export function renderTerminalQr(data: string, colored: boolean): string {
-  const matrix = qrcodeGenerator(0, "H") as QrMatrix;
-  matrix.addData(data, "Byte");
-  matrix.make();
-  const size = matrix.getModuleCount();
-  const fullSize = size + QUIET_ZONE * 2;
-  const lines: string[] = [];
-
-  for (let row = 0; row < fullSize; row += 2) {
-    let line = colored ? WHITE_BACKGROUND : "";
-    for (let column = 0; column < fullSize; column += 1) {
-      const top = moduleAt(matrix, row, column, size);
-      const bottom = moduleAt(matrix, row + 1, column, size);
-      if (!top && !bottom) {
-        line += " ";
-        continue;
-      }
-      if (!colored) {
-        line += top && bottom ? "█" : top ? "▀" : "▄";
-        continue;
-      }
-      const topColor = colorAt(row, column, fullSize);
-      const bottomColor = colorAt(row + 1, column, fullSize);
-      if (top && bottom) {
-        line += `${ansiForeground(topColor)}█`;
-      } else if (top) {
-        line += `${ansiForeground(topColor)}▀`;
-      } else {
-        line += `${ansiForeground(bottomColor)}▄`;
-      }
-    }
-    lines.push(`${line}${colored ? RESET : ""}`);
-  }
-  return lines.join("\n");
+export async function renderTerminalQr(data: string): Promise<string> {
+  const { QRCodeStyling, JSDOM, Resvg, PNG } = await loadDependencies();
+  const qrCode = new QRCodeStyling({
+    jsdom: JSDOM,
+    data,
+    ...LYNXSHIP_QR_STYLE,
+  });
+  const svg = await qrCode.getRawData("svg");
+  if (!svg) throw new Error("qr-code-styling returned no SVG data");
+  const svgText = Buffer.isBuffer(svg)
+    ? svg.toString("utf8")
+    : new TextDecoder().decode(svg);
+  // jsdom serializes SVG references as url('#id'). Normalize only those
+  // references for resvg; the SVG generated by qr-code-styling is unchanged
+  // for browsers and for the file returned by the library.
+  const rasterSvg = svgText.replaceAll("url('#", "url(#").replaceAll("')", ")");
+  const png = new Resvg(rasterSvg).render().asPng();
+  const image = cropToQrContent(PNG.sync.read(Buffer.from(png)));
+  return renderRasterInTerminal(image);
 }

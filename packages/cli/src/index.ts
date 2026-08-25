@@ -3,6 +3,7 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
+import { detectLynxFramework } from "./frameworks.js";
 import { BuildOrchestrator } from "@lynxship/build-orchestrator";
 import { JsonRepository } from "@lynxship/db";
 import {
@@ -596,7 +597,9 @@ async function executeBuild(
   return result;
 }
 
-async function buildSharedLynxBundle(): Promise<void> {
+async function buildSharedLynxBundle(
+  miso: { attribute?: string; artifact?: string } | undefined,
+): Promise<void> {
   const progress = ui.progress("Shared Lynx bundle");
   try {
     progress.update(
@@ -606,6 +609,7 @@ async function buildSharedLynxBundle(): Promise<void> {
     await buildLynxBundle(root, {
       quiet: json,
       onOutput: (message) => progress.event(message),
+      miso,
     });
     progress.update(100, "Shared native Lynx bundle ready");
   } finally {
@@ -759,6 +763,8 @@ Node support: Node 22/24 LTS or Node 26 Current. Use Node 24 LTS for production.
 }
 
 async function looksLikeLynxProject(): Promise<boolean> {
+  const framework = await detectLynxFramework(root);
+  if (framework.framework !== "unknown") return true;
   const configFiles = [
     "lynx.config.ts",
     "lynx.config.js",
@@ -969,11 +975,11 @@ async function runRspeedyCommand(
   let devUrl: string | undefined;
   let devQrPrinted = false;
   let devQrTimer: NodeJS.Timeout | undefined;
-  const printDevQr = (): void => {
+  const printDevQr = async (): Promise<void> => {
     if (!devUrl || devQrPrinted || json || ui.options.quiet) return;
     devQrPrinted = true;
     if (devQrTimer) clearTimeout(devQrTimer);
-    ui.devServerQr(devUrl);
+    await ui.devServerQr(devUrl);
   };
   await runRspeedy(root, subcommand, forwarded, {
     env: environment,
@@ -985,9 +991,11 @@ async function runRspeedyCommand(
       if (url && (!devUrl || url.includes("fullscreen=true"))) {
         devUrl = url;
         if (devQrTimer) clearTimeout(devQrTimer);
-        devQrTimer = setTimeout(printDevQr, 500);
+        devQrTimer = setTimeout(() => {
+          void printDevQr();
+        }, 500);
       }
-      if (devUrl && shouldPrintDevServerQr(line)) printDevQr();
+      if (devUrl && shouldPrintDevServerQr(line)) void printDevQr();
     },
   });
   printValue(
@@ -1382,7 +1390,39 @@ async function main(): Promise<void> {
     const nodeMajor = Number(process.versions.node.split(".")[0]);
     const nodeSupported = nodeMajor >= 22;
     const nodeRecommended = nodeMajor % 2 === 0;
+    const framework = await detectLynxFramework(root);
     const checks = [
+      {
+        name: "lynx-framework",
+        ok: framework.framework !== "unknown",
+        status:
+          framework.framework === "unknown"
+            ? ("warn" as const)
+            : framework.experimental
+              ? ("warn" as const)
+              : ("pass" as const),
+        value:
+          framework.framework === "unknown"
+            ? "unknown · verify the official Lynx/Rspeedy integration"
+            : framework.label +
+              " · " +
+              framework.evidence +
+              (framework.experimental ? " · early access" : ""),
+      },
+      ...(framework.framework === "miso"
+        ? [
+            {
+              name: "miso-nix",
+              ok: commandExists("nix"),
+              status: commandExists("nix")
+                ? ("pass" as const)
+                : ("fail" as const),
+              value: commandExists("nix")
+                ? "Nix detected"
+                : "missing · fix: install Nix and rerun doctor",
+            },
+          ]
+        : []),
       {
         name: "node",
         ok: nodeSupported,
@@ -2354,7 +2394,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (buildAll && wait && !local) await buildSharedLynxBundle();
+  if (buildAll && wait && !local)
+    await buildSharedLynxBundle(resolveProfile(config, profile).miso);
 
   const progress = ui.progress("All Lynx targets build");
   const progressValues: Partial<Record<Platform, number>> = {};

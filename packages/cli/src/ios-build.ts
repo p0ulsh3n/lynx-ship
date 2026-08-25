@@ -453,6 +453,7 @@ async function runRealIosSimulatorBuild(
       await buildLynxBundle(options.root, {
         quiet: options.quiet,
         onOutput: options.onEvent,
+        miso: options.profile.miso,
       });
     }
     if (ios.bundleScript) {
@@ -723,6 +724,7 @@ export async function runRealIosBuild(
       await buildLynxBundle(options.root, {
         quiet: options.quiet,
         onOutput: options.onEvent,
+        miso: options.profile.miso,
       });
     }
     if (ios.bundleScript) {

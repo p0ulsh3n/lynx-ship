@@ -53,7 +53,7 @@ lynxship --help
 Or run it without a global install:
 
 ```bash
-npx @lynxship/cli doctor --project-dir ./my-lynx-app
+npx @lynxship/cli@latest doctor --project-dir ./my-lynx-app
 ```
 
 ### Create a new LynxJS project
@@ -111,6 +111,37 @@ npx @lynxship/cli@latest build --platform ios --simulator --no-upload
 The official Vue Lynx plugin remains in the project's Rspeedy configuration,
 for example `pluginVueLynx()` in `lynx.config.ts`. Keep its versions and the
 project lockfile together so builds remain reproducible.
+
+### Octane and Miso
+
+LynxShip also recognizes the official Octane and Miso Lynx integrations.
+Octane uses its Rspeedy plugin and remains early access for native iOS and
+Android; the official Lynx packages are not published yet, so use the
+upstream Octane repository and keep its pinned workspace dependencies.
+
+Miso is a Haskell/Nix framework whose native backend is upstreamed into miso.
+It produces a Lynx bundle through a Nix flake rather than an npm build script.
+The current official gallery exposes `default` and `bundle` outputs, so no
+extra configuration is needed. Set the flake output explicitly for a custom
+project:
+
+```json
+{
+  "build": {
+    "production": {
+      "miso": {
+        "attribute": "bundle",
+        "artifact": "result/main.lynx.bundle"
+      }
+    }
+  }
+}
+```
+
+The complete, source-verified smoke-test instructions are in
+examples/lynx-octane-fixture and examples/miso-lynx-fixture. LynxShip never
+claims an experimental Octane or Miso build is production-ready solely because
+the bundle compiled.
 
 To intentionally upgrade an existing project's Lynx/Rspeedy dependencies,
 follow the official upgrader workflow:
@@ -836,7 +867,7 @@ End users install the already-published package with npm; they do not need
 this repository. Maintainers publishing a new version should run:
 
 ```bash
-cd S:\lynx-ship
+cd <path-to-lynx-ship>
 npm config set registry https://registry.npmjs.org/
 npm whoami
 pnpm install --frozen-lockfile
@@ -874,6 +905,8 @@ packages/sdk-ios              iOS OTA client
 packages/*                    Contracts, storage, queue, signing and workers
 examples/lynx-android-demo    Real LynxJS Android integration
 examples/lynx-basic-template Minimal LynxJS smoke-test template
+examples/lynx-octane-fixture  Octane Lynx validation notes
+examples/miso-lynx-fixture    Miso/Nix validation notes
 compose.yaml                  PostgreSQL, Redis and API development profile
 docs/                         Architecture, operations and acceptance docs
 ```
@@ -891,6 +924,8 @@ docs/                         Architecture, operations and acceptance docs
 - [docs/status.md](docs/status.md): implemented, beta and planned areas.
 - [docs/acceptance-matrix.md](docs/acceptance-matrix.md): verification
   evidence and remaining production gates.
+- [docs/target-fixtures.md](docs/target-fixtures.md): reproducible external
+  framework and platform validation.
 
 ## License
 

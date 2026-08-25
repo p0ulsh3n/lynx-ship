@@ -5,7 +5,7 @@ The CLI follows the terminal-first LynxShip identity defined in the normative sp
 ## Command surface
 
 The published executable is installed with `npm install --global
-@lynxship/cli` and is invoked as `lynxship`. The complete operational surface
+@lynxship/cli@latest` and is invoked as `lynxship`. The complete operational surface
 is:
 
 ```text
