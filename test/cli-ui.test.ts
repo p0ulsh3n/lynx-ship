@@ -84,8 +84,8 @@ test("CLI extracts the Lynx Explorer QR URL from Rspeedy output", () => {
   assert.equal(shouldPrintDevServerQr("Network: use --host"), false);
 });
 
-test("CLI QR uses the WISA renderer settings with LynxShip branding", () => {
-  const rendered = renderTerminalQr(
+test("CLI QR uses the WISA renderer settings with LynxShip branding", async () => {
+  const rendered = await renderTerminalQr(
     "lynx://localhost:3000/main.lynx.bundle",
     true,
   );
@@ -94,5 +94,5 @@ test("CLI QR uses the WISA renderer settings with LynxShip branding", () => {
   assert.equal(LYNXSHIP_QR_STYLE.cornersSquareOptions.type, "dot");
   assert.equal("image" in LYNXSHIP_QR_STYLE, false);
   assert.match(rendered, /\u001b\[38;2;\d+;\d+;\d+m/);
-  assert.match(rendered, /[▀▄█]/);
+  assert.match(rendered, /[▀▄]/);
 });
