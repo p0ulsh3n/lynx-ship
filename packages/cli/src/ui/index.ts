@@ -7,6 +7,7 @@ import {
   createProgress,
   spin,
   downloadArtifact,
+  devServerQr,
   type BoxRow,
   type ProgressHandle,
   type SpinnerHandle,
@@ -92,6 +93,10 @@ export class CliUi {
 
   downloadArtifact(url: string, expiresAt?: string): void {
     downloadArtifact(url, expiresAt, this.interactive);
+  }
+
+  devServerQr(url: string): void {
+    devServerQr(url, this.interactive && !this.options.quiet);
   }
 }
 

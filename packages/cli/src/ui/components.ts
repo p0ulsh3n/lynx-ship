@@ -348,3 +348,10 @@ export function downloadArtifact(
   console.log(`  ${c.teal("URL")}  ${url}`);
   if (expiresAt) console.log(`  ${c.muted(`Link expires at ${expiresAt}`)}`);
 }
+
+export function devServerQr(url: string, enabled = true): void {
+  if (!enabled) return;
+  console.log(`\n${c.brandBold("Lynx Explorer")}`);
+  qrcode.generate(url, { small: true }, (code) => console.log(code));
+  console.log(`  ${c.teal("URL")}  ${url}\n`);
+}

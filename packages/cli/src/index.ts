@@ -91,6 +91,7 @@ import { formatDevToolFailure, inspectLynxDevTool } from "./lynx-devtool.js";
 import { hasHarmonyHost, runRealHarmonyBuild } from "./harmony-build.js";
 import { hasWebConfiguration, runRealWebBuild } from "./web-build.js";
 import { hasDesktopHost, runRealDesktopBuild } from "./desktop-build.js";
+import { extractDevServerUrl, shouldPrintDevServerQr } from "./dev-qr.js";
 import {
   inspectDesktopTarget,
   inspectHarmonyTarget,
@@ -927,10 +928,29 @@ async function runRspeedyCommand(
       "Lynx Explorer mode: no Android or iOS native host is required. Scan the QR code printed by Rspeedy; source changes reload automatically.",
     );
   }
+  let devUrl: string | undefined;
+  let devQrPrinted = false;
+  let devQrTimer: NodeJS.Timeout | undefined;
+  const printDevQr = (): void => {
+    if (!devUrl || devQrPrinted || json || ui.options.quiet) return;
+    devQrPrinted = true;
+    if (devQrTimer) clearTimeout(devQrTimer);
+    ui.devServerQr(devUrl);
+  };
   await runRspeedy(root, subcommand, forwarded, {
     env: environment,
     quiet: json,
-    onOutput: (line) => ui.info(`│ ${line}`),
+    onOutput: (line) => {
+      ui.info(`│ ${line}`);
+      if (subcommand !== "dev") return;
+      const url = extractDevServerUrl(line);
+      if (url && (!devUrl || url.includes("fullscreen=true"))) {
+        devUrl = url;
+        if (devQrTimer) clearTimeout(devQrTimer);
+        devQrTimer = setTimeout(printDevQr, 500);
+      }
+      if (devUrl && shouldPrintDevServerQr(line)) printDevQr();
+    },
   });
   printValue(
     { status: "success", command: `rspeedy ${subcommand}` },

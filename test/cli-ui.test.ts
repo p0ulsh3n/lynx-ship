@@ -4,6 +4,10 @@ import { createColors } from "@lynxship/cli/ui/colors";
 import { formatEvent } from "@lynxship/cli/ui/components";
 import { LOGO } from "@lynxship/cli/ui/logo";
 import { terminalOptions } from "@lynxship/cli/ui/terminal";
+import {
+  extractDevServerUrl,
+  shouldPrintDevServerQr,
+} from "../packages/cli/src/dev-qr.js";
 
 test("CLI colors can be disabled without ANSI escapes", () => {
   assert.equal(createColors(false).teal("LynxShip"), "LynxShip");
@@ -45,4 +49,21 @@ test("CLI event journal uses semantic markers", () => {
   assert.match(stripAnsi(formatEvent("Build queued…")), /^  - /);
   assert.match(stripAnsi(formatEvent("Error: failed")), /^  x /);
   assert.match(stripAnsi(formatEvent("Gradle task output")), /^  (?:│|\|) /);
+});
+
+test("CLI extracts the Lynx Explorer QR URL from Rspeedy output", () => {
+  assert.equal(
+    extractDevServerUrl(
+      "default: http://192.168.1.2:3000/main.lynx.bundle?fullscreen=true",
+    ),
+    "http://192.168.1.2:3000/main.lynx.bundle?fullscreen=true",
+  );
+  assert.equal(
+    extractDevServerUrl(
+      "Lynx http://192.168.1.2:3000/main.lynx.bundle Network: use --host",
+    ),
+    "http://192.168.1.2:3000/main.lynx.bundle",
+  );
+  assert.equal(shouldPrintDevServerQr("ready built in 5.21s"), true);
+  assert.equal(shouldPrintDevServerQr("Network: use --host"), false);
 });
