@@ -6,6 +6,7 @@ import qrcode from "qrcode-terminal";
 import type { ColorName } from "./colors.js";
 import { c, colorsEnabled } from "./state.js";
 import { supportsUnicode, terminalWidth } from "./terminal.js";
+import { renderTerminalQr } from "./qr.js";
 
 export interface BoxRow {
   label: string;
@@ -357,6 +358,10 @@ export function downloadArtifact(
 export function devServerQr(url: string, enabled = true): void {
   if (!enabled) return;
   console.log(`\n${c.brandBold("Lynx Explorer")}`);
-  qrcode.generate(url, { small: true }, (code) => console.log(code));
+  if (colorsEnabled && supportsUnicode()) {
+    console.log(renderTerminalQr(url, true));
+  } else {
+    qrcode.generate(url, { small: true }, (code) => console.log(code));
+  }
   console.log(`  ${c.teal("URL")}  ${url}\n`);
 }

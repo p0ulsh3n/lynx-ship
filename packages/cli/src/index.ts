@@ -41,7 +41,11 @@ import {
   suggestedAndroidApplicationId,
 } from "./android-host.js";
 import { initializeIosHost, suggestedIosBundleIdentifier } from "./ios-host.js";
-import { hasIosHost, runRealIosBuild } from "./ios-build.js";
+import {
+  hasIosHost,
+  launchIosSimulatorApp,
+  runRealIosBuild,
+} from "./ios-build.js";
 import {
   configureAndroid,
   configureAppStoreConnect,
@@ -391,6 +395,7 @@ interface BuildExecutionOptions {
   skipBundleBuild?: boolean;
   simulator?: boolean;
   simulatorDevice?: string;
+  simulatorAutostart?: boolean;
 }
 
 async function executeBuild(
@@ -415,6 +420,7 @@ async function executeBuild(
     skipBundleBuild,
     simulator = false,
     simulatorDevice,
+    simulatorAutostart = false,
   } = options;
   if (wait && !local) await ensureNativeHostForBuild(platform, profile, config);
   // Host initialization can write lynxship.json (for example, the generated
@@ -512,6 +518,7 @@ async function executeBuild(
           profile: resolvedBuildProfile,
           simulator,
           simulatorDevice,
+          simulatorAutostart,
           uploadArtifacts: !skipUpload,
           skipBundleBuild,
           quiet: json,
@@ -696,6 +703,8 @@ Build options:
   --no-upload              Keep the artifact local and skip R2 (CI verification)
   --simulator             Build and install an iOS Simulator .app locally
   --device <id>           Select the iOS Simulator device for a simulator build
+  --autostart              Open and launch the iOS Simulator app after install
+  --no-autostart           Install the Simulator app without launching it
   --allow-unsigned         Allow an unsigned Desktop artifact only with --no-upload (local tests)
   --local                 Use the contract-only build path for tests
 
@@ -727,6 +736,7 @@ Device and diagnostics options:
   run --artifact <path>   Install a specific APK, IPA, app or signed HAP
   run --device <id>       Select an Android, iOS or HarmonyOS device
   run --simulator         Install an iOS .app with simctl
+  run --launch             Launch the installed iOS Simulator app after install
   logs --device <id>      Select the device or simulator for native logs
 
 Global options:
@@ -740,6 +750,7 @@ Global options:
   --project-id <id>       Project ID used by init
   --application-id <id>   Android package/application ID for host init
   --bundle-identifier <id> iOS bundle identifier for host init
+  --icon <path>            1024x1024 PNG app icon for iOS host init
   --library-dir <path>    Native library directory for autolink codegen
   --simulator             Build/install an iOS .app or install one with simctl
   --help                  Show this complete command reference
@@ -906,6 +917,7 @@ async function ensureNativeHostForBuild(
   const result = await initializeIosHost(root, {
     bundleIdentifier,
     appName: basename(root),
+    appIcon: flag("--icon") ?? undefined,
   });
   ui.success(`iOS host created: ${result.directory}`);
 }
@@ -1103,6 +1115,12 @@ async function runDevice(): Promise<void> {
         quiet: json,
         onOutput: (line) => ui.info(`│ ${line}`),
       });
+      if (args.includes("--launch")) {
+        await launchIosSimulatorApp(root, device, artifactPath, {
+          quiet: json,
+          onEvent: (line) => ui.info(`│ ${line}`),
+        });
+      }
     } else {
       assert(
         device !== "booted",
@@ -1722,6 +1740,7 @@ async function main(): Promise<void> {
     const result = await initializeIosHost(root, {
       bundleIdentifier,
       appName: basename(root),
+      appIcon: flag("--icon") ?? undefined,
     });
     ui.success(`iOS host created: ${result.directory}`);
     printValue(
@@ -2295,6 +2314,10 @@ async function main(): Promise<void> {
   const config = await loadConfig(root);
   const profile = flag("--profile", simulator ? "simulator" : "production")!;
   const simulatorDevice = flag("--device") ?? undefined;
+  const simulatorAutostart =
+    simulator &&
+    !args.includes("--no-autostart") &&
+    (args.includes("--autostart") || (!json && ui.interactive));
   const wait = !args.includes("--no-wait");
   const local = args.includes("--local");
   const platforms: Platform[] = buildAll
@@ -2322,6 +2345,7 @@ async function main(): Promise<void> {
       local,
       simulator,
       simulatorDevice,
+      simulatorAutostart,
       state,
       repository,
       builds,
@@ -2358,6 +2382,7 @@ async function main(): Promise<void> {
           local,
           simulator,
           simulatorDevice,
+          simulatorAutostart,
           state,
           repository,
           builds,

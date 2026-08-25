@@ -212,6 +212,11 @@ Next steps
 ```
 
 `lynxship dev` is for Lynx Explorer and live QR/HMR development. The Android
+Rspeedy URLs are rendered by LynxShip's own compact QR adapter so the QR
+remains visible when child-process output is captured. It uses the WISA
+renderer settings (H-level correction, dots, dotted corners and 50-degree
+linear gradient) with LynxShip pink-to-cyan colors and no center logo;
+non-interactive output keeps the URL and omits terminal decoration. The Android
 host command creates the native Gradle project needed for a real APK/AAB. An
 interactive real build creates a missing host after asking for the application
 ID; CI must pass `--application-id`. Existing native directories are never
@@ -277,6 +282,10 @@ Use the official Lynx Harmony integration under `harmony/`. The project must
 provide `hvigorw`, `hvigorfile.ts`, `build-profile.json5` and
 `oh-package.json5`. LynxShip runs `ohpm install`, the pinned wrapper in release
 mode, then verifies the signed HAP with the official `hap-sign-tool.jar`.
+Before Hvigor runs, it copies root `.lynx.bundle` files plus `dist/static` and
+`dist/async` into the configured HarmonyOS `rawfile` directory. This keeps
+imported images and lazy bundles inside the HAP instead of leaving them only in
+the JavaScript build output.
 
 Optional profile overrides are explicit and remain project-owned:
 
@@ -406,6 +415,19 @@ with:
 lynxship ios host init --bundle-identifier com.example.myapp
 ```
 
+If the project already has its app icon, provide the required high-resolution
+PNG during host creation:
+
+```bash
+lynxship ios host init --bundle-identifier com.example.myapp --icon ./assets/icon.png
+```
+
+The icon must be a square 1024x1024 PNG. For an existing host, set
+`build.production.ios.appIcon` in `lynxship.json`, or add `icon.png` in the
+project root; LynxShip discovers it before the next native build. Simulator
+builds may fall back to a square `lynx-logo*.png` emitted by Rspeedy for local
+preview only; provide the project icon for an IPA or store release.
+
 The command refuses to overwrite an existing `ios/` directory and creates a
 Swift host based on Lynx's official integration shape: `LynxEnv`, `LynxView`,
 `LynxTemplateProvider`, `Podfile`, `ExportOptions.plist` and a bundle sync
@@ -421,9 +443,18 @@ lynxship build --project-dir ./my-lynx-app --platform ios --simulator --profile 
 ```
 
 This uses Xcode's `iphonesimulator` SDK, boots an available Simulator, creates
-and installs a local `.app`, and does not require a physical iPhone, Apple
+and installs a local `.app`, opens the Simulator and launches the app in an
+interactive terminal, and does not require a physical iPhone, Apple
 Distribution certificate, provisioning profile or R2 upload. Use the
-production profile only for a signed device IPA.
+production profile only for a signed device IPA. Pass `--no-autostart` to
+install without launching, or use `run --platform ios --simulator --launch
+--artifact <app>` to launch an already-built app.
+
+Rspeedy can emit external files beside the main bundle. The iOS adapter copies
+all root `.lynx.bundle` files plus `dist/static` and `dist/async` into the
+compiled `.app` before installation/export, so imported images and lazy assets
+are included in Simulator and device builds. The same synchronization is
+applied to older LynxShip-generated iOS hosts.
 
 Run the complete first-use diagnosis before building:
 

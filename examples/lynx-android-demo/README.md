@@ -51,7 +51,9 @@ $env:LYNXSHIP_KEY_PASSWORD = "<local-test-password>"
 pnpm android:release
 ```
 
-The generated APK is `android/app/build/outputs/apk/release/app-release.apk`.
+The raw Gradle output is `android/app/build/outputs/apk/release/app-release.apk`.
+When the build is run through LynxShip, that APK is verified, copied to a
+UUID-named artifact path, and only that immutable artifact is uploaded to R2.
 For the CLI flow, leaving the keystore path empty in `lynxship android
 configure` generates a fresh local keystore automatically and stores its
 password with the platform secure store. Use a real secret keystore and

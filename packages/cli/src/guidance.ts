@@ -264,8 +264,13 @@ const guidance: Record<string, CliGuidance> = {
     note: "Simulator .app artifacts stay local; use a signed production device build for R2 upload and distribution.",
   },
   IOS_COCOAPODS_REQUIRED: {
-    commands: ["brew install cocoapods", "lynxship build --platform ios"],
-    note: "CocoaPods is required when the iOS host contains a Podfile.",
+    commands: [
+      "brew install cocoapods",
+      "cd ios && pod install --repo-update",
+      "lynxship doctor --platform ios --profile simulator",
+      "lynxship build --platform ios --simulator --profile simulator --no-upload",
+    ],
+    note: "CocoaPods is required when the iOS host contains a Podfile. The first install refreshes the CocoaPods specs repository.",
   },
   IOS_PROJECT_REQUIRED: {
     commands: [
@@ -500,10 +505,11 @@ function guidanceForErrorBase(error: unknown): CliGuidance {
   if (/xcode|xcrun|cocoapods|pod install/i.test(message)) {
     return {
       commands: [
-        "lynxship doctor --platform ios",
-        "lynxship build --platform ios",
+        "cd ios && pod install --repo-update",
+        "lynxship doctor --platform ios --profile simulator",
+        "lynxship build --platform ios --simulator --profile simulator --no-upload",
       ],
-      note: "Check macOS, Xcode command-line tools and CocoaPods.",
+      note: "Check macOS, Xcode command-line tools and CocoaPods. For a first install, refresh the CocoaPods specs repository.",
     };
   }
   return { commands: [] };

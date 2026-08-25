@@ -11,6 +11,11 @@ import {
 import { inspectDesktopSigning } from "../packages/cli/src/desktop-signing.js";
 import { guidanceForError } from "../packages/cli/src/guidance.js";
 import { detectWebBuildScript } from "../packages/cli/src/web-build.js";
+import {
+  prepareIosAppIcon,
+  syncIosRuntimeResources,
+} from "../packages/cli/src/ios-build.js";
+import { syncHarmonyAssets } from "../packages/cli/src/harmony-build.js";
 
 function runCli(
   cwd: string,
@@ -35,6 +40,89 @@ function runCli(
     child.on("close", (code) => resolve({ code, stdout, stderr }));
   });
 }
+
+test("iOS packaging carries Rspeedy assets and a project app icon into the host", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-ios-assets-"));
+  const appBundle = join(cwd, "build", "Test.app");
+  const iconSet = join(
+    cwd,
+    "ios",
+    "Test",
+    "Assets.xcassets",
+    "AppIcon.appiconset",
+  );
+  await mkdir(join(cwd, "dist", "static", "image"), { recursive: true });
+  await mkdir(join(cwd, "dist", "async"), { recursive: true });
+  await mkdir(iconSet, { recursive: true });
+  await mkdir(appBundle, { recursive: true });
+  await writeFile(join(cwd, "dist", "main.lynx.bundle"), "bundle");
+  await writeFile(join(cwd, "dist", "static", "image", "logo.png"), "logo");
+  await writeFile(join(cwd, "dist", "async", "chunk.js"), "chunk");
+  await writeFile(
+    join(cwd, "ios", "Test", "Assets.xcassets", "Contents.json"),
+    "{}\n",
+  );
+  await writeFile(
+    join(iconSet, "Contents.json"),
+    '{"images":[],"info":{"version":1}}\n',
+  );
+
+  const png = Buffer.alloc(24);
+  png.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  png.writeUInt32BE(1024, 16);
+  png.writeUInt32BE(1024, 20);
+  await writeFile(join(cwd, "icon.png"), png.toString("binary"), "binary");
+
+  assert.deepEqual(await syncIosRuntimeResources(cwd, appBundle), [
+    "main.lynx.bundle",
+    "async",
+    "static",
+  ]);
+  assert.equal(
+    await readFile(join(appBundle, "static", "image", "logo.png"), "utf8"),
+    "logo",
+  );
+  assert.equal(
+    await readFile(join(appBundle, "async", "chunk.js"), "utf8"),
+    "chunk",
+  );
+  assert.equal(await prepareIosAppIcon(cwd), join(cwd, "icon.png"));
+  assert.match(
+    await readFile(join(iconSet, "Contents.json"), "utf8"),
+    /AppIcon\.png/,
+  );
+});
+
+test("HarmonyOS packaging carries Rspeedy static and async assets", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-harmony-assets-"));
+  await mkdir(join(cwd, "dist", "static"), { recursive: true });
+  await mkdir(join(cwd, "dist", "async"), { recursive: true });
+  await writeFile(join(cwd, "dist", "main.lynx.bundle"), "bundle");
+  await writeFile(join(cwd, "dist", "static", "logo.png"), "logo");
+  await writeFile(join(cwd, "dist", "async", "chunk.js"), "chunk");
+
+  const copied = await syncHarmonyAssets(cwd, {
+    harmony: { bundleDir: "harmony/entry/src/main/resources/rawfile" },
+  });
+  assert.deepEqual(copied, ["main.lynx.bundle", "async", "static"]);
+  assert.equal(
+    await readFile(
+      join(
+        cwd,
+        "harmony",
+        "entry",
+        "src",
+        "main",
+        "resources",
+        "rawfile",
+        "static",
+        "logo.png",
+      ),
+      "utf8",
+    ),
+    "logo",
+  );
+});
 
 test("TypeScript CLI init/build/update use persistent local state", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "lynxship-"));

@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createColors } from "@lynxship/cli/ui/colors";
 import { formatEvent } from "@lynxship/cli/ui/components";
+import {
+  LYNXSHIP_QR_STYLE,
+  renderTerminalQr,
+} from "../packages/cli/src/ui/qr.js";
 import { LOGO } from "@lynxship/cli/ui/logo";
 import { terminalOptions } from "@lynxship/cli/ui/terminal";
 import {
@@ -64,6 +68,31 @@ test("CLI extracts the Lynx Explorer QR URL from Rspeedy output", () => {
     ),
     "http://192.168.1.2:3000/main.lynx.bundle",
   );
+  assert.equal(
+    extractDevServerUrl("default: lynx://192.168.1.2:3000/main.lynx.bundle"),
+    "lynx://192.168.1.2:3000/main.lynx.bundle",
+  );
+  assert.equal(
+    extractDevServerUrl("default: myapp://lynx-dev?url=http%3A%2F%2Fhost"),
+    "myapp://lynx-dev?url=http%3A%2F%2Fhost",
+  );
   assert.equal(shouldPrintDevServerQr("ready built in 5.21s"), true);
+  assert.equal(
+    shouldPrintDevServerQr("Lynx http://192.168.1.2:3000/main.lynx.bundle"),
+    true,
+  );
   assert.equal(shouldPrintDevServerQr("Network: use --host"), false);
+});
+
+test("CLI QR uses the WISA renderer settings with LynxShip branding", () => {
+  const rendered = renderTerminalQr(
+    "lynx://localhost:3000/main.lynx.bundle",
+    true,
+  );
+  assert.equal(LYNXSHIP_QR_STYLE.qrOptions.errorCorrectionLevel, "H");
+  assert.equal(LYNXSHIP_QR_STYLE.dotsOptions.type, "dots");
+  assert.equal(LYNXSHIP_QR_STYLE.cornersSquareOptions.type, "dot");
+  assert.equal("image" in LYNXSHIP_QR_STYLE, false);
+  assert.match(rendered, /\u001b\[38;2;\d+;\d+;\d+m/);
+  assert.match(rendered, /[▀▄█]/);
 });

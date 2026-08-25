@@ -18,6 +18,7 @@ const templateRoot = fileURLToPath(
 export interface IosHostOptions {
   bundleIdentifier: string;
   appName: string;
+  appIcon?: string;
 }
 
 export interface IosHostResult {
@@ -28,6 +29,7 @@ export interface IosHostResult {
   scheme: string;
   exportOptionsPlist: string;
   bundleScript: string;
+  appIcon?: string;
   configUpdated: boolean;
 }
 
@@ -92,6 +94,7 @@ async function updateProjectConfig(
     configuration: "Release",
     exportOptionsPlist: "ios/ExportOptions.plist",
     bundleScript: "ios/sync-bundle.mjs",
+    ...(result.appIcon ? { appIcon: result.appIcon } : {}),
   };
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
   return true;
@@ -139,6 +142,7 @@ export async function initializeIosHost(
     scheme,
     exportOptionsPlist: "ios/ExportOptions.plist",
     bundleScript: "ios/sync-bundle.mjs",
+    ...(options.appIcon ? { appIcon: options.appIcon } : {}),
   };
   const configUpdated = await updateProjectConfig(root, result);
   return { ...result, configUpdated };

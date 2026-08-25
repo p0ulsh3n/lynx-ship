@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
+import {
+  copyFile,
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { assert, sha256, type BuildJob } from "@lynxship/contracts";
@@ -16,6 +24,7 @@ interface IosBuildOptions {
   uploadArtifacts?: boolean;
   simulator?: boolean;
   simulatorDevice?: string;
+  simulatorAutostart?: boolean;
   skipBundleBuild?: boolean;
   quiet?: boolean;
   onEvent?: (message: string) => void;
@@ -118,6 +127,247 @@ async function findSimulatorApp(
   return join(products, app.name);
 }
 
+async function findArchiveApp(archivePath: string): Promise<string> {
+  const products = join(archivePath, "Products", "Applications");
+  const entries = await readdir(products, { withFileTypes: true }).catch(
+    () => [],
+  );
+  const app = entries.find(
+    (entry) => entry.isDirectory() && entry.name.endsWith(".app"),
+  );
+  assert(
+    app,
+    "IOS_ARCHIVE_ARTIFACT_MISSING",
+    `Xcode did not produce an app bundle under ${products}`,
+  );
+  return join(products, app.name);
+}
+
+async function copyIosOutput(source: string, target: string): Promise<boolean> {
+  if (!existsSync(source)) return false;
+  await rm(target, { recursive: true, force: true });
+  await cp(source, target, { recursive: true, force: true });
+  return true;
+}
+
+/**
+ * Rspeedy leaves external resources beside the Lynx bundle. Xcode does not
+ * know about those generated files, so copy the complete output into the
+ * final app bundle after the native host has been compiled. This also makes
+ * older LynxShip-generated iOS hosts behave correctly without editing their
+ * Xcode project files.
+ */
+export async function syncIosRuntimeResources(
+  root: string,
+  appBundle: string,
+): Promise<string[]> {
+  const distRoot = join(root, "dist");
+  const entries = await readdir(distRoot, { withFileTypes: true }).catch(
+    () => [],
+  );
+  const bundles = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".lynx.bundle"))
+    .map((entry) => entry.name);
+  assert(
+    bundles.length > 0,
+    "LYNX_BUNDLE_MISSING",
+    `No .lynx.bundle was found in ${distRoot}. Check the Rspeedy output configuration.`,
+  );
+
+  const copied: string[] = [];
+  for (const name of [...bundles, "async", "static"]) {
+    if (await copyIosOutput(join(distRoot, name), join(appBundle, name)))
+      copied.push(name);
+  }
+  return copied;
+}
+
+async function findAppIconSet(directory: string): Promise<string | undefined> {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(
+    () => [],
+  );
+  for (const entry of entries) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory() && entry.name === "AppIcon.appiconset") {
+      if (existsSync(join(path, "Contents.json"))) return path;
+    }
+    if (
+      entry.isDirectory() &&
+      !entry.name.endsWith(".xcodeproj") &&
+      !entry.name.endsWith(".xcworkspace")
+    ) {
+      const result = await findAppIconSet(path);
+      if (result) return result;
+    }
+  }
+  return undefined;
+}
+
+function pngDimensions(content: Buffer): { width: number; height: number } {
+  assert(
+    content.length >= 24 &&
+      content.subarray(0, 8).toString("hex") === "89504e470d0a1a0a",
+    "IOS_APP_ICON_INVALID",
+    "The iOS app icon must be a valid PNG file.",
+  );
+  return { width: content.readUInt32BE(16), height: content.readUInt32BE(20) };
+}
+
+async function findConfiguredIosIcon(
+  root: string,
+  configured?: string,
+  allowFallback = false,
+): Promise<{ path: string; fallback: boolean } | undefined> {
+  const candidates = [
+    configured,
+    "icon.png",
+    "app-icon.png",
+    "assets/icon.png",
+    "assets/app-icon.png",
+    "src/assets/icon.png",
+    "src/assets/app-icon.png",
+    "public/icon.png",
+  ].filter((value): value is string => Boolean(value));
+  for (const candidate of candidates) {
+    const path = resolve(root, candidate);
+    if (existsSync(path)) return { path, fallback: false };
+  }
+  if (allowFallback) {
+    const staticImages = join(root, "dist", "static", "image");
+    const entries = await readdir(staticImages, { withFileTypes: true }).catch(
+      () => [],
+    );
+    const logo = entries.find(
+      (entry) =>
+        entry.isFile() &&
+        entry.name.endsWith(".png") &&
+        /(?:lynx|logo|icon)/i.test(entry.name),
+    );
+    if (logo) return { path: join(staticImages, logo.name), fallback: true };
+  }
+  return undefined;
+}
+
+/**
+ * Apply a project-owned 1024x1024 PNG to the generated or existing Xcode
+ * AppIcon set. A missing icon is reported as a warning by the caller rather
+ * than silently inventing product branding.
+ */
+export async function prepareIosAppIcon(
+  root: string,
+  configured?: string,
+  options: { allowFallback?: boolean } = {},
+): Promise<string | undefined> {
+  const source = await findConfiguredIosIcon(
+    root,
+    configured,
+    options.allowFallback,
+  );
+  const iconSet = await findAppIconSet(join(root, "ios"));
+  if (!source || !iconSet) return undefined;
+  const dimensions = pngDimensions(await readFile(source.path));
+  const filename = "AppIcon.png";
+  const destination = join(iconSet, filename);
+  if (dimensions.width === 1024 && dimensions.height === 1024) {
+    await copyFile(source.path, destination);
+  } else {
+    assert(
+      source.fallback &&
+        dimensions.width === dimensions.height &&
+        dimensions.width >= 512,
+      "IOS_APP_ICON_INVALID",
+      `The iOS app icon must be exactly 1024x1024 PNG; received ${dimensions.width}x${dimensions.height} from ${source.path}.`,
+    );
+    assert(
+      commandExists("sips"),
+      "IOS_SIPS_REQUIRED",
+      "The fallback Simulator icon needs Apple's sips tool. Install Xcode command-line tools, or provide a 1024x1024 icon.png.",
+    );
+    await runProcess(
+      "sips",
+      ["-z", "1024", "1024", source.path, "--out", destination],
+      {
+        cwd: root,
+        quiet: true,
+      },
+    );
+  }
+  await writeFile(
+    join(iconSet, "Contents.json"),
+    `${JSON.stringify(
+      {
+        images: [
+          {
+            filename,
+            idiom: "universal",
+            platform: "ios",
+            size: "1024x1024",
+          },
+        ],
+        info: { author: "xcode", version: 1 },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  return source.path;
+}
+
+async function appBundleIdentifier(
+  root: string,
+  appBundle: string,
+): Promise<string> {
+  assert(
+    commandExists("plutil"),
+    "IOS_PLUTIL_REQUIRED",
+    "plutil was not found. Install Xcode command-line tools before launching the Simulator app.",
+  );
+  const result = await captureProcess(
+    "plutil",
+    [
+      "-extract",
+      "CFBundleIdentifier",
+      "raw",
+      "-o",
+      "-",
+      join(appBundle, "Info.plist"),
+    ],
+    { cwd: root },
+  );
+  const identifier = result.stdout.trim();
+  assert(
+    result.code === 0 && identifier,
+    "IOS_BUNDLE_IDENTIFIER_MISSING",
+    `Could not read CFBundleIdentifier from ${join(appBundle, "Info.plist")}.`,
+  );
+  return identifier;
+}
+
+export async function launchIosSimulatorApp(
+  root: string,
+  device: string,
+  appBundle: string,
+  options: {
+    quiet?: boolean;
+    onEvent?: (message: string) => void;
+  } = {},
+): Promise<void> {
+  const identifier = await appBundleIdentifier(root, appBundle);
+  options.onEvent?.("Opening iOS Simulator…");
+  await runProcess("open", ["-a", "Simulator"], {
+    cwd: root,
+    quiet: options.quiet,
+    onOutput: options.onEvent,
+  });
+  options.onEvent?.(`Launching ${identifier} in iOS Simulator…`);
+  await runProcess("xcrun", ["simctl", "launch", device, identifier], {
+    cwd: root,
+    quiet: options.quiet,
+    onOutput: options.onEvent,
+  });
+}
+
 async function hashDirectory(directory: string): Promise<{
   hash: string;
   size: number;
@@ -217,6 +467,14 @@ async function runRealIosSimulatorBuild(
         },
       );
     }
+    const icon = await prepareIosAppIcon(options.root, ios.appIcon, {
+      allowFallback: true,
+    });
+    if (icon) step(`Using iOS app icon: ${icon}`, 9);
+    else
+      options.onEvent?.(
+        "No 1024x1024 PNG app icon was found; configure ios.appIcon or add icon.png before distribution.",
+      );
     transitionBuild(job, "queued", "iOS Simulator build queued locally");
     transitionBuild(job, "provisioning", "iOS Simulator destination selected");
     transitionBuild(
@@ -259,12 +517,30 @@ async function runRealIosSimulatorBuild(
       configuration,
       ios.scheme,
     );
+    const copiedResources = await syncIosRuntimeResources(
+      options.root,
+      appPath,
+    );
+    for (const name of copiedResources)
+      options.onEvent?.(`Packaged ${name} in the iOS Simulator app`);
     step("Installing .app in iOS Simulator…", 75);
     await runProcess("xcrun", ["simctl", "install", device, appPath], {
       cwd: options.root,
       quiet: options.quiet,
       onOutput: options.onEvent,
     });
+    if (options.simulatorAutostart) {
+      try {
+        await launchIosSimulatorApp(options.root, device, appPath, {
+          quiet: options.quiet,
+          onEvent: options.onEvent,
+        });
+      } catch (error) {
+        options.onEvent?.(
+          `Simulator app installed but could not be launched automatically: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
     const artifact = await hashDirectory(appPath);
     const artifactName = nativeArtifactName("app");
     job.attempts += 1;
@@ -353,12 +629,21 @@ async function installCocoaPods(
     "IOS_COCOAPODS_REQUIRED",
     "CocoaPods was not found. Install CocoaPods on macOS, then rerun the build.",
   );
-  onEvent?.("Installing iOS CocoaPods dependencies…");
-  await runProcess("pod", ["install"], {
-    cwd: iosDirectory,
-    quiet,
-    onOutput: onEvent,
-  });
+  const hasLockfile = existsSync(join(iosDirectory, "Podfile.lock"));
+  onEvent?.(
+    hasLockfile
+      ? "Installing iOS CocoaPods dependencies…"
+      : "Updating CocoaPods specs and installing iOS dependencies…",
+  );
+  await runProcess(
+    "pod",
+    hasLockfile ? ["install"] : ["install", "--repo-update"],
+    {
+      cwd: iosDirectory,
+      quiet,
+      onOutput: onEvent,
+    },
+  );
 }
 
 async function findIpa(directory: string): Promise<string> {
@@ -452,6 +737,12 @@ export async function runRealIosBuild(
         },
       );
     }
+    const icon = await prepareIosAppIcon(options.root, ios.appIcon);
+    if (icon) step(`Using iOS app icon: ${icon}`, 9);
+    else
+      options.onEvent?.(
+        "No 1024x1024 PNG app icon was found; configure ios.appIcon or add icon.png before distribution.",
+      );
     step("Preparing Xcode archive…", 10);
     await runProcess(
       "xcodebuild",
@@ -470,6 +761,13 @@ export async function runRealIosBuild(
       ],
       { cwd: options.root, quiet: options.quiet, onOutput: options.onEvent },
     );
+    const archivedApp = await findArchiveApp(archivePath);
+    const copiedResources = await syncIosRuntimeResources(
+      options.root,
+      archivedApp,
+    );
+    for (const name of copiedResources)
+      options.onEvent?.(`Packaged ${name} in the iOS archive`);
     transitionBuild(job, "queued", "iOS build queued locally");
     transitionBuild(
       job,

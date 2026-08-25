@@ -62,6 +62,34 @@ performs the real native build and signature verification, keeps the UUID-named
 artifact locally, and skips only the Cloudflare R2 transfer. Android builds are
 allowed on Linux, macOS and Windows; iOS builds are allowed only on macOS.
 
+For iOS Simulator builds, an interactive `lynxship build --platform ios
+--simulator` installs the generated `.app`, opens Simulator and launches the
+application automatically. Use `--no-autostart` to keep it installed without
+launching, or `lynxship run --platform ios --simulator --launch --artifact
+<app>` to launch an existing `.app`. The CLI reads `CFBundleIdentifier` from
+the built app rather than guessing it.
+
+Rspeedy externalizes imported files into `dist/static` and lazy bundles into
+`dist/async`. The iOS adapter copies every root `.lynx.bundle`, `static` and
+`async` directory into the compiled app bundle before Simulator installation
+or IPA export. If the native app icon set is empty, configure a project-owned
+1024x1024 PNG using `ios host init --icon ./assets/icon.png` or
+`build.production.ios.appIcon`; the CLI validates the PNG instead of silently
+shipping a blank Home Screen icon. For Simulator-only previews, a square
+`lynx-logo*.png` in the Rspeedy output may be resized with Apple's `sips` tool
+as a development fallback; distribution builds should provide the project's
+own 1024x1024 icon.
+
+During `lynxship dev`, Rspeedy's official QR plugin may print only the URL
+because LynxShip captures the child-process output instead of giving Rspeedy
+the terminal directly. LynxShip therefore renders its own compact QR from the
+same URL, including custom schemas such as `lynx://`; JSON, quiet and explicit
+non-interactive modes intentionally emit no QR. The renderer follows the QR
+service configuration: H-level error correction, dots modules, dotted corner
+markers, a 50-degree linear LynxShip pink-to-cyan gradient, and no center logo.
+Terminals without Unicode/ANSI color support use the compact monochrome
+fallback.
+
 `lynxship build --platform all` creates one independent job per supported target
 and runs the real adapters concurrently after the shared Lynx bundle stage.
 Android and iOS use their native hosts; HarmonyOS uses the official Hvigor
@@ -89,8 +117,10 @@ lynxship build --platform desktop --profile production
 Web requires `lynx.config.*` with the official `environments.web` setup or an
 explicit `build:web` script and verifies `dist/*.web.bundle`. HarmonyOS
 requires the official `harmony/` host, `ohpm`, the pinned `hvigorw` wrapper and
-`hap-sign-tool.jar`; the HAP must be signed and passes the official
-`verify-app` check. Desktop requires Lynxtron/electron-builder packaging and a
+`hap-sign-tool.jar`; before Hvigor runs, the adapter copies root `.lynx.bundle`
+files plus `dist/static` and `dist/async` into the configured HarmonyOS
+`rawfile` directory. The HAP must be signed and pass the official `verify-app`
+check. Desktop requires Lynxtron/electron-builder packaging and a
 real `.dmg`, `.exe`, `.appimage` or `.zip` output. These adapters inspect and
 use project-owned configuration instead of inventing native integrations. On
 Windows, `doctor` checks for Authenticode signing input and the build verifies

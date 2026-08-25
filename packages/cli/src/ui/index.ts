@@ -96,7 +96,13 @@ export class CliUi {
   }
 
   devServerQr(url: string): void {
-    devServerQr(url, this.interactive && !this.options.quiet);
+    // Rspeedy suppresses its own QR when its stdout is piped. LynxShip
+    // captures that output, so render the fallback unless the caller asked
+    // for machine JSON, quiet output, or an explicitly non-interactive run.
+    devServerQr(
+      url,
+      !this.options.json && !this.options.quiet && !this.options.nonInteractive,
+    );
   }
 }
 

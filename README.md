@@ -356,6 +356,13 @@ On macOS, a pure Rspeedy project can receive the same native host bootstrap:
 lynxship ios host init --bundle-identifier com.example.myapp
 ```
 
+Pass `--icon ./assets/icon.png` when the project owns a 1024x1024 PNG icon. An
+existing host can configure the same path as `build.production.ios.appIcon` in
+`lynxship.json`; `icon.png` in the project root is also discovered automatically.
+Simulator-only builds can fall back to a square `lynx-logo*.png` from the
+Rspeedy output, but a real IPA should always use the project's own 1024x1024
+icon.
+
 This command never overwrites an existing `ios/` directory. It creates an
 official Lynx CocoaPods/Xcode host with `LynxEnv`, `LynxView`, the Swift bundle
 provider, `Podfile`, `ExportOptions.plist` and the bundle synchronization
@@ -376,8 +383,12 @@ lynxship doctor --platform ios --profile simulator
 lynxship build --platform ios --simulator --profile simulator --no-upload
 ```
 
-The simulator build uses Xcode's `iphonesimulator` SDK and `simctl`. Use the
-production profile only when creating a signed device IPA.
+The simulator build uses Xcode's `iphonesimulator` SDK and `simctl`. In an
+interactive terminal it opens the Simulator and launches the installed app
+automatically; use `--no-autostart` to opt out. The adapter also packages all
+Rspeedy root bundles plus `dist/static` and `dist/async` into the final app,
+which is required for imported images and lazy assets to work in native builds.
+Use the production profile only when creating a signed device IPA.
 
 Before an iOS build, `lynxship doctor --platform ios` checks macOS, the active
 Xcode developer directory, Xcode/`xcodebuild`, `xcrun`, `codesign`, `unzip`, the
@@ -497,6 +508,15 @@ Lynx, Trace and DevTool dependencies, then connect the target by USB.
 server; scan its QR code with Lynx Explorer to see the screen on a device and
 receive live source updates. This is the correct workflow for a pure
 `create-rspeedy` project.
+
+LynxShip renders the QR itself from Rspeedy's official URL output. This keeps
+the QR visible even though the CLI captures Rspeedy's child-process logs, and
+also supports custom QR schemas such as `lynx://`. JSON, quiet and explicit
+non-interactive modes intentionally print the URL without a QR. The terminal
+renderer follows the QR service configuration: H-level error correction, dots
+modules, dotted corner markers, a 50-degree linear gradient using the
+LynxShip pink-to-cyan brand colors, and no center logo. Terminals without
+Unicode/ANSI color support use the compact monochrome fallback.
 
 An APK/AAB is a different workflow. Lynx's production integration requires a
 native Android host that initializes Lynx, creates a `LynxView`, provides a
@@ -659,6 +679,9 @@ verifies one `*.web.bundle` in `dist/`, `build/web/` or `build/` (or the
 profile's explicit artifact path).
 HarmonyOS requires the official Lynx `harmony/` host, `ohpm`, its pinned
 `hvigorw` wrapper, release signing and the official HAP `verify-app` check.
+Before Hvigor starts, LynxShip synchronizes the root `.lynx.bundle` files plus
+`dist/static` and `dist/async` into the configured HarmonyOS `rawfile`
+directory, so imported and lazy assets are included in the HAP.
 Desktop requires Lynxtron/`lynxtron-builder`, or a project Electron Builder
 host with `pack`, `build:desktop` or `build:app`. The adapter discovers
 distributables in the common Electron Builder output directories. The
@@ -700,7 +723,8 @@ for a signed or submitted IPA.
         "workspace": "ios/App.xcworkspace",
         "scheme": "App",
         "exportOptionsPlist": "ios/ExportOptions.plist",
-        "bundleScript": "ios/sync-bundle.mjs"
+        "bundleScript": "ios/sync-bundle.mjs",
+        "appIcon": "assets/icon.png"
       }
     }
   }
@@ -812,17 +836,25 @@ End users install the already-published package with npm; they do not need
 this repository. Maintainers publishing a new version should run:
 
 ```bash
-npm login
+cd S:\lynx-ship
+npm config set registry https://registry.npmjs.org/
+npm whoami
+pnpm install --frozen-lockfile
 pnpm --filter @lynxship/cli... build
 pnpm --filter create-lynxship-app build
-cd packages/cli
-npm pack --dry-run
-cd ../..
-pnpm publish -r --access public
+pnpm --filter @lynxship/cli pack --dry-run
+pnpm --filter create-lynxship-app pack --dry-run
+
+# Publish only the public packages whose versions changed.
+pnpm --filter @lynxship/cli publish --access public --no-git-checks
+pnpm --filter create-lynxship-app publish --access public --no-git-checks
 ```
 
 The `@lynxship` scope must belong to the publishing npm account or
-organization. Verify the published result with:
+organization, and `npm whoami` must show the authorized account. The public
+runtime packages are already released separately; publish a changed runtime
+package before the CLI only if its version or source changed. Verify the
+published result with:
 
 ```bash
 npm view @lynxship/cli version

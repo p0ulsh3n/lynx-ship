@@ -16,6 +16,7 @@ export interface BuildProfile {
     scheme?: string;
     exportOptionsPlist?: string;
     bundleScript?: string;
+    appIcon?: string;
   };
   harmony?: {
     task?: string;

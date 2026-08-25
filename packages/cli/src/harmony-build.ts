@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -63,7 +63,7 @@ export function harmonyToolchain(root: string): {
   };
 }
 
-async function syncBundle(
+export async function syncHarmonyAssets(
   root: string,
   profile: BuildProfile,
 ): Promise<string[]> {
@@ -82,9 +82,18 @@ async function syncBundle(
     profile.harmony?.bundleDir ?? "harmony/entry/src/main/resources/rawfile",
   );
   await mkdir(target, { recursive: true });
-  for (const bundle of bundles)
-    await copyFile(join(dist, bundle), join(target, bundle));
-  return bundles;
+  const outputNames = [...bundles, "async", "static"];
+  const copied: string[] = [];
+  for (const name of outputNames) {
+    const source = join(dist, name);
+    if (!existsSync(source)) continue;
+    await rm(join(target, name), { recursive: true, force: true });
+    if (name.endsWith(".lynx.bundle"))
+      await copyFile(source, join(target, name));
+    else await cp(source, join(target, name), { recursive: true, force: true });
+    copied.push(name);
+  }
+  return copied;
 }
 
 async function findHap(root: string, configured?: string): Promise<string> {
@@ -219,7 +228,9 @@ export async function runRealHarmonyBuild(
       });
     }
     step("Syncing bundle into the HarmonyOS HAP resources…", 20);
-    await syncBundle(options.root, options.profile);
+    const copiedAssets = await syncHarmonyAssets(options.root, options.profile);
+    for (const name of copiedAssets)
+      options.onEvent?.(`Synced dist/${name} into HarmonyOS rawfile resources`);
     transitionBuild(job, "queued", "HarmonyOS build queued locally");
     transitionBuild(job, "provisioning", "HarmonyOS Hvigor toolchain selected");
     transitionBuild(
