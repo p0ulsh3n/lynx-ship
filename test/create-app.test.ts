@@ -6,11 +6,13 @@ import { tmpdir } from "node:os";
 
 import {
   addLynxShipCliDependency,
+  createScaffoldCommand,
   createLynxShipConfig,
   detectPackageManager,
   LYNXSHIP_CLI_VERSION,
   parseArguments,
   RSPEEDY_VERSION,
+  scaffoldPackage,
 } from "../packages/create-app/src/index.js";
 
 test("create app defaults to the official TypeScript Rspeedy template", () => {
@@ -36,6 +38,31 @@ test("create app parses explicit directory and no-install options", () => {
   assert.equal(options.template, "react-js");
   assert.equal(options.install, false);
   assert.equal(options.git, false);
+});
+
+test("create app supports the official Vue Lynx templates", () => {
+  const options = parseArguments(["vue-app", "--template", "vue-ts"]);
+
+  assert.equal(options.template, "vue-ts");
+  assert.equal(scaffoldPackage(options.template), "create-vue-lynx");
+
+  const command = createScaffoldCommand(
+    "npm",
+    "S:/apps/vue-app",
+    options.template,
+    true,
+  );
+  assert.deepEqual(command, {
+    command: process.platform === "win32" ? "npx.cmd" : "npx",
+    args: [
+      "--yes",
+      "create-vue-lynx@latest",
+      "--dir",
+      "S:/apps/vue-app",
+      "--template",
+      "vue-ts",
+    ],
+  });
 });
 
 test("create app rejects unsupported templates and ambiguous targets", () => {

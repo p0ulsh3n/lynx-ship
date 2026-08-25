@@ -70,9 +70,10 @@ npx lynxship dev
 ```
 
 The generator creates a ReactLynx TypeScript project by default. Use
-`--template react-js` for JavaScript, `--no-install` to defer dependency
-installation, or `--dir <path>` to choose an explicit empty directory. It
-never overwrites a non-empty directory and does not invent a native host.
+`--template react-js` for JavaScript, `--template vue-ts` or `--template vue-js`
+for Vue Lynx, `--no-install` to defer dependency installation, or `--dir <path>`
+to choose an explicit empty directory. It never overwrites a non-empty
+directory and does not invent a native host.
 For an existing LynxJS project, use `lynxship init` instead. New projects use
 the current stable `create-rspeedy@latest` template; their lockfile records
 the resolved versions so later builds remain reproducible. The generator also
@@ -81,18 +82,18 @@ required.
 
 ### Vue Lynx projects
 
-Existing Vue Lynx projects are supported. Vue Lynx is a Vue 3 integration for
+Existing Vue Lynx projects are supported, and the generator can create them
+directly. Vue Lynx is a Vue 3 integration for
 Lynx that is configured as an Rspeedy plugin; LynxShip keeps that project-owned
 configuration and runs the project's package-manager `build` script. It does
 not replace `pluginVueLynx()` or rewrite `lynx.config.*` during a build.
 
-Create a Vue Lynx project with the official scaffold, then initialize LynxShip:
+Create a Vue Lynx project through LynxShip. This delegates to the official
+scaffold and always resolves its current published version:
 
 ```bash
-npm create vue-lynx@latest my-vue-lynx-app
+npx create-lynxship-app@latest my-vue-lynx-app --template vue-ts
 cd my-vue-lynx-app
-npm install
-npx @lynxship/cli@latest init
 npx @lynxship/cli@latest doctor
 npx @lynxship/cli@latest dev
 ```

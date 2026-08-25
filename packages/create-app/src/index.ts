@@ -8,7 +8,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
-export const CREATE_APP_VERSION = "0.1.2";
+export const CREATE_APP_VERSION = "0.1.3";
 
 export const RSPEEDY_VERSION = "latest";
 
@@ -16,10 +16,12 @@ export const LYNXSHIP_CLI_VERSION = "latest";
 
 type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
+export type CreateAppTemplate = "react-ts" | "react-js" | "vue-ts" | "vue-js";
+
 export interface CreateAppOptions {
   readonly projectName?: string;
   readonly directory?: string;
-  readonly template: "react-ts" | "react-js";
+  readonly template: CreateAppTemplate;
   readonly install: boolean;
   readonly git: boolean;
 }
@@ -33,11 +35,11 @@ export interface CreateAppResult {
 
 const HELP = `Usage: create-lynxship-app [project-name] [options]
 
-Create a new LynxJS application using the official create-rspeedy template.
+Create a new LynxJS application using an official Lynx scaffold.
 
 Options:
   -d, --dir <directory>       Create the project in a specific directory
-  -t, --template <template>   react-ts (default) or react-js
+  -t, --template <template>   react-ts (default), react-js, vue-ts or vue-js
       --no-install             Skip dependency installation
       --no-git                  Skip Git repository initialization
   -h, --help                  Show this help
@@ -47,6 +49,7 @@ Examples:
   npx create-lynxship-app@latest my-app
   npm create lynxship-app@latest my-app
   pnpm create lynxship-app@latest my-app --template react-ts
+  pnpm create lynxship-app@latest my-app --template vue-ts
 `;
 
 function valueAfter(args: string[], index: number, flag: string): string {
@@ -108,9 +111,14 @@ export function parseArguments(args: string[]): CreateAppOptions & {
     }
     if (argument === "-t" || argument === "--template") {
       const value = valueAfter(args, index, argument);
-      if (value !== "react-ts" && value !== "react-js") {
+      if (
+        value !== "react-ts" &&
+        value !== "react-js" &&
+        value !== "vue-ts" &&
+        value !== "vue-js"
+      ) {
         throw new Error(
-          `Unsupported template '${value}'. Use react-ts or react-js.`,
+          `Unsupported template '${value}'. Use react-ts, react-js, vue-ts or vue-js.`,
         );
       }
       template = value;
@@ -234,14 +242,21 @@ function executable(command: PackageManager | "npx"): string {
   return process.platform === "win32" ? `${command}.cmd` : command;
 }
 
-function createRspeedyCommand(
+export function scaffoldPackage(
+  template: CreateAppTemplate,
+): "create-rspeedy" | "create-vue-lynx" {
+  return template.startsWith("vue-") ? "create-vue-lynx" : "create-rspeedy";
+}
+
+export function createScaffoldCommand(
   manager: PackageManager,
   directory: string,
-  template: CreateAppOptions["template"],
+  template: CreateAppTemplate,
   git: boolean,
 ): { command: string; args: string[] } {
+  const packageName = scaffoldPackage(template);
   const args = [
-    `create-rspeedy@${RSPEEDY_VERSION}`,
+    `${packageName}@${RSPEEDY_VERSION}`,
     "--dir",
     directory,
     "--template",
@@ -302,7 +317,10 @@ async function run(
   }
 }
 
-async function writeProjectMetadata(directory: string): Promise<string> {
+async function writeProjectMetadata(
+  directory: string,
+  template: CreateAppTemplate,
+): Promise<string> {
   const projectId = randomUUID();
   await mkdir(join(directory, ".lynxship"), { recursive: true });
   await writeFile(
@@ -326,7 +344,7 @@ async function writeProjectMetadata(directory: string): Promise<string> {
     join(directory, "LYNXSHIP.md"),
     `# LynxShip
 
-This project was created from the official create-rspeedy template.
+This project was created from the official ${scaffoldPackage(template)} template.
 
 The LynxShip CLI is installed locally in this project.
 
@@ -370,14 +388,15 @@ export async function createApp(
   await mkdir(dirname(targetDirectory), { recursive: true });
 
   const packageManager = detectPackageManager();
+  const scaffold = scaffoldPackage(options.template);
   console.log("\n◆ Create LynxShip App\n");
   console.log(`  Project       ${basename(targetDirectory)}`);
   console.log(`  Template      ${options.template}`);
   console.log(`  Package tool  ${packageManager}`);
-  console.log(`  Source        create-rspeedy@${RSPEEDY_VERSION}\n`);
+  console.log(`  Source        ${scaffold}@${RSPEEDY_VERSION}\n`);
   console.log("◆ Creating the official Lynx/Rspeedy project…\n");
 
-  const createCommand = createRspeedyCommand(
+  const createCommand = createScaffoldCommand(
     packageManager,
     targetDirectory,
     options.template,
@@ -389,7 +408,10 @@ export async function createApp(
   await addLynxShipCliDependency(targetDirectory);
 
   console.log("\n◆ Adding LynxShip project metadata…");
-  const projectId = await writeProjectMetadata(targetDirectory);
+  const projectId = await writeProjectMetadata(
+    targetDirectory,
+    options.template,
+  );
   if (options.install) {
     console.log(`◆ Installing dependencies with ${packageManager}…\n`);
     const install = installCommand(packageManager);

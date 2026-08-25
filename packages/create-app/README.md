@@ -21,6 +21,15 @@ the official `create-rspeedy@latest` package, so new projects receive the
 current stable Lynx/Rspeedy template published by the Lynx team. It does not
 copy or reimplement the Lynx template.
 
+Vue Lynx is available through the official `create-vue-lynx@latest` scaffold:
+
+```bash
+npx create-lynxship-app@latest my-vue-app --template vue-ts
+```
+
+The selected official scaffold is resolved at creation time. The generated
+lockfile then pins the installed framework versions for reproducible builds.
+
 It also adds `@lynxship/cli@latest` as a local development dependency. No
 global LynxShip installation is required for the generated project.
 
@@ -29,6 +38,8 @@ global LynxShip installation is required for the generated project.
 ```text
 --template react-ts    TypeScript ReactLynx template (default)
 --template react-js    JavaScript ReactLynx template
+--template vue-ts      TypeScript Vue Lynx template
+--template vue-js      JavaScript Vue Lynx template
 --dir <directory>      Explicit target directory
 --no-install           Skip dependency installation
 --no-git               Skip Git initialization by create-rspeedy
@@ -58,8 +69,8 @@ npx lynxship build --platform android --profile production
 npx lynxship build --platform ios --profile production
 ```
 
-This package does not replace `create-rspeedy`, generate a fictional native
-runtime, or overwrite an existing directory.
+This package does not replace `create-rspeedy` or `create-vue-lynx`, generate a
+fictional native runtime, or overwrite an existing directory.
 
 The generated project records the resolved framework versions in its package
 manager lockfile. Existing projects are not silently upgraded during every
