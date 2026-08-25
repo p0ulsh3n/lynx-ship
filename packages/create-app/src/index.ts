@@ -8,7 +8,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
-export const CREATE_APP_VERSION = "0.1.0";
+export const CREATE_APP_VERSION = "0.1.1";
 
 export const RSPEEDY_VERSION = "latest";
 
@@ -261,13 +261,27 @@ async function run(
   args: string[],
   cwd: string,
 ): Promise<void> {
-  const child = spawn(command, args, {
-    cwd,
-    env: process.env,
-    stdio: "inherit",
-    windowsHide: false,
-  });
   const exitCode = await new Promise<number>((resolve, reject) => {
+    const executable =
+      process.platform === "win32" && command.toLowerCase().endsWith(".cmd")
+        ? (process.env.ComSpec ?? "cmd.exe")
+        : command;
+    const executableArgs =
+      executable === command ? args : ["/d", "/s", "/c", command, ...args];
+
+    let child;
+    try {
+      child = spawn(executable, executableArgs, {
+        cwd,
+        env: process.env,
+        stdio: "inherit",
+        windowsHide: false,
+      });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
     child.once("error", reject);
     child.once("close", (code) => resolve(code ?? 1));
   });
