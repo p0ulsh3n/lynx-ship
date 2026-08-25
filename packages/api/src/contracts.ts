@@ -23,7 +23,11 @@ export function validateBuildRequest(value: unknown): BuildRequest {
     "Build request requires projectId, organizationId and profile",
   );
   assert(
-    input.platform === "android" || input.platform === "ios",
+    input.platform === "android" ||
+      input.platform === "ios" ||
+      input.platform === "harmony" ||
+      input.platform === "web" ||
+      input.platform === "desktop",
     "CONTRACT_INVALID",
     "Build request platform is invalid",
   );
@@ -52,6 +56,21 @@ export function validateOtaCheckQuery(
       (value.platform === "android" || value.platform === "ios"),
     "CONTRACT_INVALID",
     "OTA check requires projectId, channel, platform and runtimeVersion",
+  );
+  assert(
+    typeof value.projectId === "string",
+    "CONTRACT_INVALID",
+    "OTA projectId is required",
+  );
+  assert(
+    typeof value.channel === "string",
+    "CONTRACT_INVALID",
+    "OTA channel is required",
+  );
+  assert(
+    typeof value.runtimeVersion === "string",
+    "CONTRACT_INVALID",
+    "OTA runtimeVersion is required",
   );
   return {
     projectId: value.projectId,

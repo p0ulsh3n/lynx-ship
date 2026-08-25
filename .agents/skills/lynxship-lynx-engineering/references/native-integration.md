@@ -21,8 +21,9 @@ Required host responsibilities:
    platform's official verifier. Never equate `assembleRelease` with a valid
    production signature.
 
-`lynxship android host init` creates only the minimal host when `android/` is
-absent. It must refuse to overwrite an existing host. After generation,
+`lynxship android host init`, or the interactive real-build bootstrap, creates
+only the minimal host when `android/` is absent. It must refuse to overwrite an
+existing host. After generation,
 inspect the application ID and add application-specific permissions,
 libraries, services and Autolink configuration deliberately.
 
@@ -48,8 +49,8 @@ Required host responsibilities:
    Xcode, a valid scheme, export options and Apple signing material.
 6. The exported `.ipa` is verified with `codesign` before it can be uploaded.
 
-`lynxship ios host init` creates the minimal Swift/Xcode/CocoaPods host only
-when `ios/` is absent. It cannot invent an Apple Developer Team, certificate,
+`lynxship ios host init`, or the interactive real-build bootstrap, creates the
+minimal Swift/Xcode/CocoaPods host only when `ios/` is absent. It cannot invent an Apple Developer Team, certificate,
 provisioning profile, entitlements, capabilities, push configuration or App
 Store identity. Those must be supplied by the application owner.
 

@@ -2,6 +2,7 @@ packages:
   - "packages/*"
   - "examples/*"
   - "!examples/lynx-community-crossplatform"
+  - "!examples/lynx-official-examples"
 
 onlyBuiltDependencies:
   - esbuild

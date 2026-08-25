@@ -9,6 +9,13 @@ export interface ProcessOptions {
   onOutput?: (line: string) => void;
 }
 
+export interface CapturedProcessResult {
+  code: number;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+}
+
 export function packageManagerCommand(root: string): {
   command: string;
   prefix: string[];
@@ -120,6 +127,50 @@ export function runProcess(
         ),
       );
     });
+  });
+}
+
+/**
+ * Run a small probe without printing it as a build event. Non-zero exit codes
+ * are returned to the caller because probes are expected to test availability.
+ */
+export function captureProcess(
+  command: string,
+  args: string[],
+  options: Pick<ProcessOptions, "cwd" | "env">,
+): Promise<CapturedProcessResult> {
+  const windowsCommand =
+    process.platform === "win32" && /\.(?:bat|cmd)$/i.test(command);
+  const commandLine = [command, ...args]
+    .map((value) =>
+      /[\s"]/.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value,
+    )
+    .join(" ");
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      windowsCommand ? "cmd.exe" : command,
+      windowsCommand ? ["/d", "/s", "/c", commandLine] : args,
+      {
+        cwd: options.cwd,
+        env: options.env ?? process.env,
+        shell: false,
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      },
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.once("error", reject);
+    child.once("close", (code, signal) =>
+      resolve({ code: code ?? 1, signal, stdout, stderr }),
+    );
   });
 }
 

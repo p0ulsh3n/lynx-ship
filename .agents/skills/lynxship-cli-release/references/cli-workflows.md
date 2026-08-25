@@ -27,7 +27,7 @@ passwords.
   Autolink and OTA readiness. A warning is not a failed check; a missing
   required host must fail the real build.
 - `dev`: run the project's local Rspeedy dev server and expose its QR/HMR
-  workflow. It does not need an Android/iOS host.
+  workflow. It does not need a production host.
 - `preview`: serve production bundle output after a real bundle build.
 - `inspect`: inspect Rspeedy/Rspack configuration; do not treat inspection as
   a build.
@@ -37,17 +37,26 @@ passwords.
 
 - `android host init --application-id <id>` and
   `ios host init --bundle-identifier <id>` create only missing minimal hosts.
+  An interactive real build performs the same bootstrap after collecting the
+  identifier; non-interactive builds must provide it explicitly. Existing
+  native directories are never overwritten.
 - `android configure` accepts an existing keystore or generates only the
   explicitly requested development key. Existing signing identities must be
   supported without replacement.
-- `build --platform android|ios --profile <name>` runs the real pipeline:
-  bundle, sync, native build, signature verification, UUID artifact name and
-  optional R2 upload.
+- `build --platform android|ios|harmony|web|desktop --profile <name>` runs the
+  real target pipeline: bundle, target sync/package, target verification,
+  UUID artifact name and optional R2 upload. Android/iOS/HarmonyOS require
+  their official hosts; Web requires the Rspeedy Web environment; Desktop
+  requires Lynxtron.
 - `build --no-upload` is a useful CI verification mode but is not an upload
   test. `build --local` is a contract-state test and must never be reported as
   a native artifact.
-- `run` and `logs` require the target platform tools (`adb` or macOS
-  `xcrun`/`simctl`) and report the target identifier used.
+- `run` and `logs` require the target platform tools (`adb`, macOS
+  `xcrun`/`simctl`, or OpenHarmony `hdc`) and report the target identifier used.
+  Web and Desktop are intentionally not treated as device-install targets.
+- `devtool doctor`, `trace doctor`, and `recorder doctor` verify project-side
+  Lynx DevTool prerequisites. They do not emulate the official DevTool
+  Desktop UI or undocumented CDP operations.
 
 ## Submission and OTA
 

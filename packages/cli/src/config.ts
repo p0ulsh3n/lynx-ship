@@ -16,6 +16,25 @@ export interface BuildProfile {
     exportOptionsPlist?: string;
     bundleScript?: string;
   };
+  harmony?: {
+    task?: string;
+    module?: string;
+    mode?: "project" | "module";
+    product?: string;
+    buildMode?: "debug" | "release";
+    bundleDir?: string;
+    artifact?: string;
+    signTool?: string;
+  };
+  web?: {
+    environment?: string;
+    script?: string;
+    artifact?: string;
+  };
+  desktop?: {
+    script?: string;
+    artifact?: string;
+  };
 }
 
 export interface LynxShipConfig {
@@ -133,9 +152,9 @@ export function resolveProfile(
 
 export function platformValue(value: string): Platform {
   assert(
-    value === "android" || value === "ios",
+    ["android", "ios", "harmony", "web", "desktop"].includes(value),
     "PLATFORM_INVALID",
-    "Platform must be android or ios",
+    "Platform must be android, ios, harmony, web or desktop",
   );
-  return value;
+  return value as Platform;
 }

@@ -1,4 +1,4 @@
-import type { BuildJob } from "@lynxship/contracts";
+import type { BuildJob, Platform } from "@lynxship/contracts";
 import type { LynxShipConfig } from "./config.js";
 
 export interface RemoteCliState {
@@ -10,7 +10,7 @@ export interface OtaPublishRequest {
   projectId: string;
   organizationId: string;
   channel: string;
-  platform: "android" | "ios";
+  platform: Platform;
   runtimeVersion: string;
   assets: Array<{ path: string; hash: string; size: number; url: string }>;
   message?: string;
@@ -21,7 +21,7 @@ export interface OtaPublishRequest {
 export interface OtaRollbackRequest {
   projectId: string;
   channel: string;
-  platform: "android" | "ios";
+  platform: Platform;
   releaseId: string;
   reason: string;
 }

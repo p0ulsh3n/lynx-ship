@@ -18,6 +18,15 @@ export async function prompt(
   }
 }
 
+export async function confirm(
+  label: string,
+  defaultValue = false,
+): Promise<boolean> {
+  const answer = await prompt(`${label} ${defaultValue ? "[Y/n]" : "[y/N]"}`);
+  if (!answer) return defaultValue;
+  return ["y", "yes", "oui", "o"].includes(answer.toLowerCase());
+}
+
 export async function secret(label: string): Promise<string> {
   if (!process.stdin.isTTY || !process.stdin.setRawMode)
     throw new Error(

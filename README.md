@@ -3,13 +3,14 @@
 Build, sign, store, submit and update LynxJS applications from your terminal.
 
 LynxShip is a terminal-first release toolchain for LynxJS. It connects the
-Rspeedy bundle, Android Gradle or Apple Xcode, Cloudflare R2 artifacts, Google
-Play, App Store Connect and signed OTA updates in one explicit workflow.
+Rspeedy bundle to Android Gradle, Apple Xcode, the official HarmonyOS host,
+Rspeedy Web or Lynxtron Desktop packaging, then handles Cloudflare R2
+artifacts, store submission and signed OTA updates in one explicit workflow.
 
-> LynxShip is currently a beta foundation. The Android local path is exercised
-> end to end. iOS builds require macOS and Xcode. Store submission still
-> requires the developer's own Apple or Google accounts and the stores' review
-> and processing steps.
+> LynxShip never fabricates a platform artifact. Android/iOS/HarmonyOS require
+> their official hosts and signing contracts; Web/Desktop require their
+> official packaging configuration. Store submission still requires the
+> developer's own Apple or Google accounts and the stores' review steps.
 
 [Documentation](docs/) · [CLI design system](docs/cli.md) · [Operations](docs/operations.md) · [Compatibility](docs/compatibility.md)
 
@@ -174,6 +175,22 @@ pnpm --version
 lynxship doctor --project-dir ./examples/lynx-android-demo --platform android
 ```
 
+`doctor --platform android` reads the Android project's own Gradle Wrapper,
+Android Gradle Plugin, `compileSdk` and `buildToolsVersion`. It then checks the
+JDK, Android SDK location, required SDK packages, `adb`, `apksigner` and SDK
+licenses. A global Gradle installation is not required: the project's
+`android/gradlew` (or `gradlew.bat`) is always used.
+
+```bash
+lynxship doctor --project-dir ./my-lynx-app --platform android --fix
+```
+
+`--fix` is an interactive, consent-based repair. It can install missing SDK
+packages with the detected `sdkmanager` and then offer to accept licenses. It
+does not download Android Studio, change `build.gradle`, replace a Gradle
+Wrapper, install a JDK, or alter signing credentials. Those changes affect the
+machine or the project and are shown as an exact repair instruction instead.
+
 ## Configuration
 
 ### Project configuration
@@ -261,6 +278,12 @@ does not generate store certificates, custom permissions, native modules or
 OTA provider logic; those are application-specific and must be integrated
 explicitly.
 
+When an interactive real `build` detects that the platform directory is
+absent, it asks for the application identifier and creates this host before
+continuing. In CI or `--non-interactive` mode, pass `--application-id` or
+`--bundle-identifier`. An existing but incomplete `android/` or `ios/`
+directory is never overwritten.
+
 ### Create an iOS host for a pure Lynx project
 
 On macOS, a pure Rspeedy project can receive the same native host bootstrap:
@@ -279,6 +302,14 @@ bundle paths are added to its production profile.
 lynxship doctor --platform ios
 lynxship build --platform ios --profile production
 ```
+
+Before an iOS build, `lynxship doctor --platform ios` checks macOS, the active
+Xcode developer directory, Xcode/`xcodebuild`, `xcrun`, `codesign`, `unzip`, the
+Xcode host and scheme, build settings, Apple team, signing identity, CocoaPods
+when `ios/Podfile` exists, export method, and provisioning profile validity.
+It never prints certificate or profile contents. On a Mac, Xcode contains
+`xcodebuild` and `xcrun`; the standalone Command Line Tools package alone is
+not sufficient for an Xcode archive.
 
 The first real build installs CocoaPods dependencies automatically. Xcode,
 CocoaPods and real Apple signing credentials are still required for a signed
@@ -345,7 +376,10 @@ lynxship doctor --project-dir <path> --platform ios
 install dependencies, create store accounts or generate production keys.
 
 **doctor** checks Node, lockfiles, project configuration, R2, signing or Xcode,
-and Lynx Autolink. It reports problems but does not rewrite native host files.
+Lynx Autolink and the platform toolchain. On Android it validates the project
+AGP/Gradle compatibility instead of guessing a global Gradle version. It
+reports problems but does not rewrite native host files. Add `--fix` to offer
+the safe SDK-package repair described above.
 
 Recoverable CLI errors include a `Next steps` section with the commands needed
 to resolve them. For example, a pure Lynx project without an Android host will
@@ -368,6 +402,20 @@ lynxship profile --project-dir <path>
 - **inspect** inspects Rspeedy/Rspack configuration.
 - **profile** runs a build with Rspack profiling enabled.
 
+### Lynx DevTool, Trace and Recorder
+
+```bash
+lynxship devtool doctor --platform android
+lynxship trace doctor --platform android
+lynxship recorder doctor --platform android
+```
+
+These commands verify the Rspeedy development script, the native host's
+development runtime, Trace/DevTool dependencies and device transport. They do
+not replace the official Lynx DevTool Desktop application. Lynx's release
+runtime intentionally excludes Trace and Recorder; use the matching `-dev`
+Lynx, Trace and DevTool dependencies, then connect the target by USB.
+
 `lynxship dev` is intentionally available even when the project has no
 `android/` or `ios/` directory. It starts the official Rspeedy development
 server; scan its QR code with Lynx Explorer to see the screen on a device and
@@ -376,9 +424,9 @@ receive live source updates. This is the correct workflow for a pure
 
 An APK/AAB is a different workflow. Lynx's production integration requires a
 native Android host that initializes Lynx, creates a `LynxView`, provides a
-bundle/resource loader and owns the Android Gradle project. LynxShip builds and
-signs that host when it exists; it does not silently invent native application
-code during `build`.
+bundle/resource loader and owns the Android Gradle project. LynxShip creates a
+missing minimal host only after collecting the application identifier; it does
+not overwrite or guess an existing native application.
 
 ### Native Lynx integration
 
@@ -390,10 +438,12 @@ lynxship ota doctor --platform android
 lynxship ota doctor --platform ios
 ```
 
-**autolink check** verifies native host integration. **autolink codegen** runs
-the library's official **codegen** package script and can generate native
-module files. **ota doctor** checks the native hooks required for signed OTA
-download, activation, fallback and rollback.
+**autolink check** verifies native host integration, manifest paths, Android
+package names, iOS podspecs and duplicate annotated capabilities when they are
+discoverable from native source. **autolink codegen** runs the library's
+official **codegen** package script and can generate native module files.
+**ota doctor** checks the native hooks required for signed OTA download,
+activation, fallback and rollback.
 
 ### Build
 
@@ -408,11 +458,12 @@ Creates a build job and, when a supported local host exists, executes the real
 Rspeedy, Gradle or Xcode pipeline. The artifact is verified, assigned a UUID
 filename and uploaded to R2.
 
-`--platform all` (or `lynxship build all`) builds Android and iOS concurrently
-after one shared Lynx bundle step. Each native pipeline has its own build job,
-progress events and UUID-named artifact. A real local all-platform build
-requires macOS with both native hosts; Windows and Linux remain supported for
-Android-only builds.
+`--platform all` (or `lynxship build all`) builds Android, iOS, HarmonyOS, Web
+and Desktop concurrently after one shared Lynx bundle step. Each target has
+its own build job, progress events and UUID-named artifact. A complete real
+all-platform build requires macOS for iOS and the official Harmony and
+Lynxtron hosts; Windows and Linux can run supported targets individually.
+Missing hosts or SDKs fail clearly instead of producing placeholder artifacts.
 
 ```bash
 lynxship build list
@@ -510,6 +561,44 @@ OTA is for JavaScript and asset changes compatible with the installed native
 runtime. The native clients verify signed manifests and asset hashes, keep the
 embedded bundle as fallback, activate updates atomically, mark a launch
 successful after the first screen and roll back after repeated failures.
+
+## Web, HarmonyOS and Desktop builds
+
+LynxShip has real adapters for the three additional Lynx targets, but each one
+uses the official project integration rather than a generated placeholder:
+
+```bash
+lynxship doctor --platform web
+lynxship build --platform web --profile production --no-upload
+
+lynxship doctor --platform harmony
+lynxship build --platform harmony --profile production --no-upload
+
+lynxship doctor --platform desktop
+lynxship build --platform desktop --profile production --no-upload
+```
+
+Web requires the Rspeedy `web` environment or a project `build:web` script and
+verifies one `*.web.bundle` in `dist/`, `build/web/` or `build/` (or the
+profile's explicit artifact path).
+HarmonyOS requires the official Lynx `harmony/` host, `ohpm`, its pinned
+`hvigorw` wrapper, release signing and the official HAP `verify-app` check.
+Desktop requires Lynxtron/`lynxtron-builder`, or a project Electron Builder
+host with `pack`, `build:desktop` or `build:app`. The adapter discovers
+distributables in the common Electron Builder output directories. The
+resulting artifacts are copied to UUID-named local paths and can be uploaded
+to R2. On Windows, LynxShip verifies the Authenticode signature on the final
+`.exe`; on macOS it verifies the Apple code signature when the artifact exposes
+an app bundle. Production or uploaded Desktop builds stop if that verification
+fails. Configure Electron Builder with `WIN_CSC_LINK`/`CSC_LINK` and the
+corresponding protected password, or with the target platform's signing
+identity. For local packaging tests only, use `--allow-unsigned --no-upload`.
+
+See the current official [Lynx Harmony integration](https://lynxjs.org/next/guide/start/integrate-with-existing-apps.html),
+[Rspeedy Web integration](https://lynxjs.org/3.6/rspeedy/start/integrate-with-existing-apps),
+[Lynxtron builder](https://lynxjs.org/next/lynxtron/api/%40lynx-js/lynxtron-builder/index.html)
+and [OpenHarmony HAP signer](https://github.com/openharmony/developtools_hapsigner)
+documentation before changing a target adapter.
 
 ## iOS builds
 

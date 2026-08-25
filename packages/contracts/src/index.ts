@@ -1,6 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
 
-export type Platform = "android" | "ios";
+export type Platform = "android" | "ios" | "harmony" | "web" | "desktop";
+
+export type MobilePlatform = Extract<Platform, "android" | "ios">;
+
+export function isMobilePlatform(
+  platform: Platform,
+): platform is MobilePlatform {
+  return platform === "android" || platform === "ios";
+}
 
 export type BuildState =
   | "created"

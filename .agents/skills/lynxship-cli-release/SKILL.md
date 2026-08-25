@@ -1,6 +1,6 @@
 ---
 name: lynxship-cli-release
-description: Build, review, secure, test, and release LynxShip CLI workflows including R2 artifacts, Android/iOS signing, OTA, store submission, CI, and npm publishing.
+description: Build, review, secure, test, and release LynxShip CLI workflows including R2 artifacts, Android/iOS/HarmonyOS signing, Web and Desktop packaging, OTA, store submission, CI, and npm publishing.
 metadata:
   short-description: LynxShip CLI builds, security, OTA, stores, and CI
 ---
@@ -36,6 +36,10 @@ requirements in [references/release-security.md](references/release-security.md)
 - Android is buildable on Windows, Linux, and macOS. iOS archive/export is
   macOS/Xcode-only; a Linux or Windows job must fail clearly and never create
   a fake IPA.
+- HarmonyOS builds use the official Lynx Harmony host, DevEco/OpenHarmony
+  toolchain and HAP verifier. Web builds use Rspeedy's Web environment. Desktop
+  builds use Lynxtron/electron-builder. Missing official inputs must fail;
+  never emit a placeholder HAP, Web bundle or installer.
 - An OTA update can change compatible JavaScript/assets only. Native code,
   permissions, native dependencies, Autolink registries, or runtime inputs
   require a new binary. Rollback moves a release pointer and does not undo a

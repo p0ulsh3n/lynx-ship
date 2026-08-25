@@ -10,6 +10,7 @@ import {
   createId,
   sha256,
   type BuildJob,
+  type MobilePlatform,
   type Platform,
   type SubmissionJob,
 } from "@lynxship/contracts";
@@ -27,6 +28,7 @@ import {
   DEFAULT_CONFIG,
   loadConfig,
   platformValue,
+  resolveProfile,
   type LynxShipConfig,
 } from "./config.js";
 import {
@@ -67,7 +69,7 @@ import {
 } from "./runtime-fingerprint.js";
 import { inspectOtaHost } from "./ota-doctor.js";
 import { otaAssetName, otaAssetPaths } from "./ota-assets.js";
-import { prompt } from "./prompt.js";
+import { confirm, prompt } from "./prompt.js";
 import {
   commandExists,
   packageManagerCommand,
@@ -76,6 +78,24 @@ import {
 } from "./process-runner.js";
 import { guidanceForError } from "./guidance.js";
 import { buildLynxBundle } from "./bundle-build.js";
+import {
+  fixAndroidToolchain,
+  formatAndroidToolchainFailure,
+  inspectAndroidToolchain,
+} from "./android-toolchain.js";
+import {
+  formatIosToolchainFailure,
+  inspectIosToolchain,
+} from "./ios-toolchain.js";
+import { formatDevToolFailure, inspectLynxDevTool } from "./lynx-devtool.js";
+import { hasHarmonyHost, runRealHarmonyBuild } from "./harmony-build.js";
+import { hasWebConfiguration, runRealWebBuild } from "./web-build.js";
+import { hasDesktopHost, runRealDesktopBuild } from "./desktop-build.js";
+import {
+  inspectDesktopTarget,
+  inspectHarmonyTarget,
+  inspectWebTarget,
+} from "./target-toolchain.js";
 
 interface CliRelease {
   id: string;
@@ -267,6 +287,16 @@ function configuredProjectId(config: LynxShipConfig): string {
   return config.projectId;
 }
 
+function mobilePlatformValue(value: string): MobilePlatform {
+  const platform = platformValue(value);
+  assert(
+    platform === "android" || platform === "ios",
+    "PLATFORM_COMMAND_UNSUPPORTED",
+    "This command supports only android or ios. Web, HarmonyOS and Desktop use their own build adapters.",
+  );
+  return platform;
+}
+
 async function renderConfigurationFooter(): Promise<void> {
   if (!ui.interactive || ui.options.quiet) return;
   const status = await readConfigurationStatus();
@@ -347,6 +377,7 @@ interface BuildExecutionOptions {
   repository: JsonRepository<CliState>;
   builds: BuildOrchestrator;
   submissions: SubmissionService;
+  allowUnsigned: boolean;
   progress?: ProgressHandle;
   progressPrefix?: string;
   onProgress?: (value?: number, label?: string) => void;
@@ -375,7 +406,9 @@ async function executeBuild(
     onEvent,
     skipBundleBuild,
   } = options;
-  await requireAutolinkReady(root, platform);
+  if (wait && !local) await ensureNativeHostForBuild(platform, profile, config);
+  if (platform === "android" || platform === "ios")
+    await requireAutolinkReady(root, platform);
   const runtime = await inspectRuntimeFingerprint(root, platform, config);
   const job = await builds.create({
     projectId: configuredProjectId(config),
@@ -390,7 +423,7 @@ async function executeBuild(
   const ownsProgress = !sharedProgress;
   const progress =
     sharedProgress ??
-    ui.progress(platform === "android" ? "Android build" : "iOS build");
+    ui.progress(`${platform[0]!.toUpperCase()}${platform.slice(1)} build`);
   const prefix = progressPrefix ? `${progressPrefix} · ` : "";
   const reportEvent = (message: string): void => {
     if (onEvent) onEvent(message);
@@ -414,20 +447,26 @@ async function executeBuild(
         isSupportedAndroidPlatform() &&
         (await hasAndroidHost(root));
       const realIos =
-        platform === "ios" && hasIosHost(root, config.build?.[profile]);
+        platform === "ios" && hasIosHost(root, resolveProfile(config, profile));
       if (platform === "ios" && !realIos && !local)
         assert(
           false,
           "IOS_HOST_REQUIRED",
-          "A macOS Xcode host is required for a real iOS build. No local fake iOS build is created.",
+          "A macOS Xcode host is required for a real iOS build. Run `lynxship ios host init --bundle-identifier <id>` or pass --bundle-identifier <id> to build.",
         );
       if (platform === "android" && !realAndroid && !local)
         assert(
           false,
           "ANDROID_HOST_REQUIRED",
-          "This project has no Android Gradle host. For live development, run `lynxship dev` and scan the QR code with Lynx Explorer; for an APK/AAB, integrate the official Lynx Android host under `android/` (including android/gradlew). `--local` is only for contract tests and does not create an APK.",
+          "This project has no Android Gradle host. Run `lynxship android host init --application-id <id>` or pass --application-id <id> to build. `lynxship dev` remains available for Lynx Explorer; `--local` does not create an APK.",
         );
       if (realAndroid) {
+        const toolchain = await inspectAndroidToolchain(root);
+        assert(
+          toolchain.ok,
+          "ANDROID_TOOLCHAIN_REQUIRED",
+          `Android toolchain is not ready: ${formatAndroidToolchainFailure(toolchain)}`,
+        );
         await runRealAndroidBuild(job, {
           root,
           profile: config.build?.[profile] ?? {},
@@ -438,10 +477,50 @@ async function executeBuild(
           onProgress: reportProgress,
         });
       } else if (realIos) {
+        const toolchain = await inspectIosToolchain(
+          root,
+          resolveProfile(config, profile),
+        );
+        assert(
+          toolchain.ok,
+          "IOS_TOOLCHAIN_REQUIRED",
+          `iOS toolchain is not ready: ${formatIosToolchainFailure(toolchain)}`,
+        );
         await runRealIosBuild(job, {
           root,
           profile: config.build?.[profile] ?? {},
           uploadArtifacts: !skipUpload,
+          skipBundleBuild,
+          quiet: json,
+          onEvent: reportEvent,
+          onProgress: reportProgress,
+        });
+      } else if (!local && platform === "web") {
+        await runRealWebBuild(job, {
+          root,
+          profile: resolveProfile(config, profile),
+          uploadArtifacts: !skipUpload,
+          skipBundleBuild,
+          quiet: json,
+          onEvent: reportEvent,
+          onProgress: reportProgress,
+        });
+      } else if (!local && platform === "harmony") {
+        await runRealHarmonyBuild(job, {
+          root,
+          profile: resolveProfile(config, profile),
+          uploadArtifacts: !skipUpload,
+          skipBundleBuild,
+          quiet: json,
+          onEvent: reportEvent,
+          onProgress: reportProgress,
+        });
+      } else if (!local && platform === "desktop") {
+        await runRealDesktopBuild(job, {
+          root,
+          profile: resolveProfile(config, profile),
+          uploadArtifacts: !skipUpload,
+          allowUnsigned: options.allowUnsigned,
           skipBundleBuild,
           quiet: json,
           onEvent: reportEvent,
@@ -465,7 +544,7 @@ async function executeBuild(
   const result = builds.get(job.id);
   if (showResult) {
     printValue(result, {
-      title: `${platform === "android" ? "Android" : "iOS"} build result`,
+      title: `${platform[0]!.toUpperCase()}${platform.slice(1)} build result`,
       rows: [
         { label: "Build ID", value: result.id, valueColor: "purple" },
         { label: "Platform", value: result.platform, valueColor: "blue" },
@@ -492,13 +571,13 @@ async function buildSharedLynxBundle(): Promise<void> {
   try {
     progress.update(
       undefined,
-      "Building Lynx bundle once for Android and iOS…",
+      "Building the shared Lynx bundle once for native targets…",
     );
     await buildLynxBundle(root, {
       quiet: json,
       onOutput: (message) => progress.event(message),
     });
-    progress.update(100, "Shared Lynx bundle ready");
+    progress.update(100, "Shared native Lynx bundle ready");
   } finally {
     progress.stop();
   }
@@ -545,6 +624,9 @@ function commandTitle(command: string): string {
       storage: "Cloudflare R2 setup",
       android: "Android signing setup",
       store: "App store submission setup",
+      devtool: "Lynx DevTool diagnostics",
+      trace: "Lynx Trace diagnostics",
+      recorder: "Lynx Recorder diagnostics",
     }[command] ?? command
   );
 }
@@ -559,17 +641,20 @@ Commands:
   preview                 Preview the production Lynx bundle locally
   inspect                 Inspect Rspeedy/Rspack configuration
   profile                 Build with Rspack profiling enabled
+  devtool doctor          Check Lynx DevTool integration and dev runtime
+  trace doctor            Check Lynx Trace prerequisites
+  recorder doctor         Check Lynx Recorder prerequisites
   autolink check          Check Lynx native-library Autolink wiring
   autolink codegen        Run the project's Native Module codegen script
   ota doctor              Check native OTA host integration
-  run                     Install an artifact on an Android/iOS target
-  logs                    Stream Android/iOS native logs
+  run                     Install an artifact on an Android/iOS/HarmonyOS target
+  logs                    Stream Android/iOS/HarmonyOS native logs
   build create            Create a local/cloud build job
   build list              List build jobs
   build status <id>       Show one build job
   build cancel <id>       Cancel a build job
   build retry <id>        Retry a failed build job
-  build all               Build Android and iOS on macOS
+  build all               Build Android, iOS, HarmonyOS, Web and Desktop
   submit                  Submit the latest successful build
   update                  Upload and publish a signed OTA update
   update rollback         Roll back an OTA channel to a previous release
@@ -582,10 +667,11 @@ Commands:
   store configure         Configure Google Play or App Store Connect submission
 
 Build options:
-  --platform <p>          Target android, ios or all for build (default: android)
+  --platform <p>          Target android, ios, harmony, web, desktop or all (default: android)
   --profile <name>        Build profile (default: production)
   --no-wait               Queue the build without executing it locally
-  --no-upload              Keep the signed artifact local and skip R2 (CI verification)
+  --no-upload              Keep the artifact local and skip R2 (CI verification)
+  --allow-unsigned         Allow an unsigned Desktop artifact only with --no-upload (local tests)
   --local                 Use the contract-only build path for tests
 
 Submit options:
@@ -608,12 +694,13 @@ Rollback options:
 
 Device and diagnostics options:
   doctor --platform <p>   Check the local toolchain (default: android)
+  doctor --fix            Install missing Android SDK packages after confirmation
   autolink check --platform <p>
                           Check native-library wiring (default: android)
   ota doctor --platform <p>
                           Check OTA host integration (default: android)
-  run --artifact <path>   Install a specific APK, IPA or app artifact
-  run --device <id>       Select the Android device or iOS simulator
+  run --artifact <path>   Install a specific APK, IPA, app or signed HAP
+  run --device <id>       Select an Android, iOS or HarmonyOS device
   run --simulator         Install an iOS .app with simctl
   logs --device <id>      Select the device or simulator for native logs
 
@@ -693,6 +780,107 @@ async function initializeBuildProject(): Promise<void> {
   ui.info("No lynxship.json found. Running lynxship init automatically…");
   await initializeProject();
   ui.success("Created lynxship.json");
+}
+
+async function ensureNativeHostForBuild(
+  platform: Platform,
+  profile: string,
+  config: LynxShipConfig,
+): Promise<void> {
+  if (platform === "android") {
+    assert(
+      isSupportedAndroidPlatform(),
+      "ANDROID_PLATFORM_UNSUPPORTED",
+      "Android builds are supported on Windows, macOS, and Linux.",
+    );
+    if (await hasAndroidHost(root)) return;
+
+    assert(
+      !(await exists(join(root, "android"))),
+      "ANDROID_HOST_EXISTS",
+      "An android/ directory exists but does not contain a usable Gradle host. LynxShip will not overwrite it; repair it or remove it deliberately, then rerun the build.",
+    );
+    const suggestedId = suggestedAndroidApplicationId(root);
+    const applicationId =
+      flag("--application-id") ??
+      (ui.interactive
+        ? await prompt("Android application ID", suggestedId)
+        : "");
+    assert(
+      applicationId,
+      "ANDROID_HOST_REQUIRED",
+      `No Android Gradle host exists. Run \`lynxship android host init --application-id ${suggestedId}\` or pass --application-id <id> to build in non-interactive mode.`,
+    );
+    ui.info(
+      "No Android host found. Creating the official LynxShip host before the build…",
+    );
+    const result = await initializeAndroidHost(root, {
+      applicationId,
+      appName: basename(root),
+    });
+    ui.success(`Android host created: ${result.directory}`);
+    return;
+  }
+
+  if (platform === "web") {
+    const resolvedProfile = resolveProfile(config, profile);
+    assert(
+      hasWebConfiguration(root) || Boolean(resolvedProfile.web?.script),
+      "WEB_CONFIGURATION_REQUIRED",
+      "No Lynx Web configuration was detected. Add environments.web to lynx.config.* or configure build.<profile>.web.script.",
+    );
+    return;
+  }
+
+  if (platform === "harmony") {
+    assert(
+      hasHarmonyHost(root),
+      "HARMONY_HOST_REQUIRED",
+      "No complete HarmonyOS host was found. Add an official Lynx Harmony host under harmony/ before building.",
+    );
+    return;
+  }
+
+  if (platform === "desktop") {
+    const resolvedProfile = resolveProfile(config, profile);
+    assert(
+      await hasDesktopHost(root, resolvedProfile),
+      "DESKTOP_HOST_REQUIRED",
+      "No Lynxtron desktop host was found. Use the official Lynxtron template or configure a pack script before building.",
+    );
+    return;
+  }
+
+  assert(
+    process.platform === "darwin",
+    "IOS_MACOS_REQUIRED",
+    "iOS hosts and IPA builds require macOS with Xcode. Run this build on macOS or a macOS CI worker.",
+  );
+  const resolvedProfile = resolveProfile(config, profile);
+  if (hasIosHost(root, resolvedProfile)) return;
+
+  assert(
+    !(await exists(join(root, "ios"))),
+    "IOS_HOST_EXISTS",
+    "An ios/ directory exists but does not contain a usable Xcode host. LynxShip will not overwrite it; repair it deliberately, then rerun the build.",
+  );
+  const suggestedId = suggestedIosBundleIdentifier(root);
+  const bundleIdentifier =
+    flag("--bundle-identifier") ??
+    (ui.interactive ? await prompt("iOS bundle identifier", suggestedId) : "");
+  assert(
+    bundleIdentifier,
+    "IOS_HOST_REQUIRED",
+    `No iOS host exists. Run \`lynxship ios host init --bundle-identifier ${suggestedId}\` or pass --bundle-identifier <id> to build in non-interactive mode.`,
+  );
+  ui.info(
+    "No iOS host found. Creating the official LynxShip host before the build…",
+  );
+  const result = await initializeIosHost(root, {
+    bundleIdentifier,
+    appName: basename(root),
+  });
+  ui.success(`iOS host created: ${result.directory}`);
 }
 
 function forwardedToolArgs(values: string[]): string[] {
@@ -787,6 +975,40 @@ async function runAutolinkCodegen(): Promise<void> {
   );
 }
 
+async function runDevToolDoctor(
+  kind: "devtool" | "trace" | "recorder",
+): Promise<void> {
+  await initializeBuildProject();
+  const platform = mobilePlatformValue(flag("--platform", "android")!);
+  const status = await inspectLynxDevTool(root, platform);
+  const ready =
+    kind === "devtool"
+      ? status.ok
+      : kind === "trace"
+        ? status.traceReady
+        : status.recorderReady;
+  if (!ready) process.exitCode = 1;
+  printValue(
+    { ...status, requested: kind, ready },
+    {
+      title: `Lynx ${kind === "devtool" ? "DevTool" : kind[0]!.toUpperCase() + kind.slice(1)} · ${platform}`,
+      rows: status.checks.map((item) => ({
+        label: item.name,
+        value: `${item.status} · ${item.value}${item.fix && item.status !== "pass" ? ` · fix: ${item.fix}` : ""}`,
+        valueColor:
+          item.status === "pass"
+            ? "green"
+            : item.status === "warn"
+              ? "yellow"
+              : "red",
+      })),
+      done: ready
+        ? `${kind} prerequisites are ready. Open Lynx DevTool Desktop and connect the target device by USB.`
+        : `Lynx ${kind} prerequisites are incomplete: ${formatDevToolFailure(status) || "review the failed checks"}`,
+    },
+  );
+}
+
 async function runDevice(): Promise<void> {
   const platform = platformValue(flag("--platform", "android")!);
   const artifact = flag("--artifact");
@@ -816,7 +1038,7 @@ async function runDevice(): Promise<void> {
       quiet: json,
       onOutput: (line) => ui.info(`│ ${line}`),
     });
-  } else {
+  } else if (platform === "ios") {
     assert(
       process.platform === "darwin",
       "IOS_MACOS_REQUIRED",
@@ -859,6 +1081,37 @@ async function runDevice(): Promise<void> {
         },
       );
     }
+  } else if (platform === "harmony") {
+    assert(
+      commandExists("hdc"),
+      "HARMONY_HDC_REQUIRED",
+      "hdc was not found in PATH. Install the OpenHarmony SDK platform tools before installing a HAP.",
+    );
+    assert(
+      artifactPath.endsWith(".hap"),
+      "DEVICE_ARTIFACT_INVALID",
+      "HarmonyOS run requires a signed .hap artifact.",
+    );
+    const device = flag("--device");
+    await runProcess(
+      "hdc",
+      device
+        ? ["-t", device, "install", "-r", artifactPath]
+        : ["install", "-r", artifactPath],
+      {
+        cwd: root,
+        quiet: json,
+        onOutput: (line) => ui.info(`│ ${line}`),
+      },
+    );
+  } else {
+    assert(
+      false,
+      "TARGET_RUN_UNSUPPORTED",
+      platform === "web"
+        ? "Web artifacts are previewed with `lynxship preview` or served by the project; they are not installed on a device."
+        : "Desktop installers are launched by the operating system after packaging; LynxShip does not claim a cross-platform install command.",
+    );
   }
   printValue(
     { status: "installed", platform, artifact: artifactPath },
@@ -872,10 +1125,7 @@ async function runDevice(): Promise<void> {
 
 async function streamNativeLogs(): Promise<void> {
   const platform = platformValue(flag("--platform", "android")!);
-  const device = flag(
-    "--device",
-    platform === "android" ? undefined : "booted",
-  );
+  const device = flag("--device", platform === "ios" ? "booted" : undefined);
   if (platform === "android") {
     assert(
       commandExists("adb"),
@@ -887,7 +1137,7 @@ async function streamNativeLogs(): Promise<void> {
       quiet: json,
       onOutput: (line) => ui.info(`│ ${line}`),
     });
-  } else {
+  } else if (platform === "ios") {
     assert(
       process.platform === "darwin",
       "IOS_MACOS_REQUIRED",
@@ -917,6 +1167,28 @@ async function streamNativeLogs(): Promise<void> {
         "debug",
       ],
       { cwd: root, quiet: json, onOutput: (line) => ui.info(`│ ${line}`) },
+    );
+  } else if (platform === "harmony") {
+    assert(
+      commandExists("hdc"),
+      "HARMONY_HDC_REQUIRED",
+      "hdc was not found in PATH. Install the OpenHarmony SDK platform tools before streaming logs.",
+    );
+    const argsForHdc = device
+      ? ["-t", device, "shell", "hilog"]
+      : ["shell", "hilog"];
+    await runProcess("hdc", argsForHdc, {
+      cwd: root,
+      quiet: json,
+      onOutput: (line) => ui.info(`│ ${line}`),
+    });
+  } else {
+    assert(
+      false,
+      "TARGET_LOGS_UNSUPPORTED",
+      platform === "web"
+        ? "Web logs are emitted by the browser/runtime console; use lynxship dev or the project's Web DevTools."
+        : "Desktop logs are emitted by the packaged runtime; use the target OS logging tools.",
     );
   }
 }
@@ -987,13 +1259,61 @@ async function main(): Promise<void> {
     const config = await loadConfig(root);
     const configuration = await readConfigurationStatus();
     const doctorPlatform = platformValue(flag("--platform", "android")!);
-    const autolink = await inspectAutolink(root);
-    const autolinkForPlatform = autolink[doctorPlatform];
+    const autolink =
+      doctorPlatform === "android" || doctorPlatform === "ios"
+        ? await inspectAutolink(root)
+        : undefined;
+    const autolinkForPlatform =
+      autolink && (doctorPlatform === "android" || doctorPlatform === "ios")
+        ? autolink[doctorPlatform]
+        : undefined;
     const lockfile = await findLockfile(root);
     const credentialStore = credentialStorageDescription();
     const nativeCredentialStore = !credentialStore.includes("owner-only");
     const androidHost =
       doctorPlatform === "android" ? await hasAndroidHost(root) : false;
+    const doctorProfileName = flag("--profile", "production")!;
+    const doctorProfile = config.build?.[doctorProfileName]
+      ? resolveProfile(config, doctorProfileName)
+      : {
+          name: doctorProfileName,
+          ...(DEFAULT_CONFIG.build?.production ?? {}),
+        };
+    const targetToolchain =
+      doctorPlatform === "web"
+        ? await inspectWebTarget(root, doctorProfile)
+        : doctorPlatform === "harmony"
+          ? await inspectHarmonyTarget(root, doctorProfile)
+          : doctorPlatform === "desktop"
+            ? await inspectDesktopTarget(root, doctorProfile)
+            : undefined;
+    assert(
+      !args.includes("--fix") || doctorPlatform === "android",
+      "CLI_DOCTOR_FIX_PLATFORM",
+      "`doctor --fix` currently repairs Android SDK packages; run it with `--platform android`.",
+    );
+    assert(
+      !args.includes("--fix") || ui.interactive,
+      "CLI_INTERACTIVE_REQUIRED",
+      "Run `lynxship doctor --platform android --fix` in an interactive terminal.",
+    );
+    let androidToolchain =
+      doctorPlatform === "android"
+        ? await inspectAndroidToolchain(root)
+        : undefined;
+    const iosToolchain =
+      doctorPlatform === "ios"
+        ? await inspectIosToolchain(root, doctorProfile)
+        : undefined;
+    if (androidToolchain && args.includes("--fix")) {
+      await fixAndroidToolchain(
+        root,
+        androidToolchain,
+        (message) => confirm(message),
+        (line) => ui.info(line),
+      );
+      androidToolchain = await inspectAndroidToolchain(root);
+    }
     const nodeMajor = Number(process.versions.node.split(".")[0]);
     const nodeSupported = nodeMajor >= 22;
     const nodeRecommended = nodeMajor % 2 === 0;
@@ -1042,8 +1362,37 @@ async function main(): Promise<void> {
                 ? "Gradle host found"
                 : "missing · fix: lynxship android host init --application-id com.example.myapp",
             },
+            ...(androidToolchain?.checks ?? []).map((toolchainCheck) => ({
+              name: toolchainCheck.name,
+              ok: toolchainCheck.ok,
+              status: toolchainCheck.status,
+              value:
+                toolchainCheck.fix && toolchainCheck.status !== "pass"
+                  ? `${toolchainCheck.value} · fix: ${toolchainCheck.fix}`
+                  : toolchainCheck.value,
+            })),
           ]
-        : []),
+        : doctorPlatform === "ios"
+          ? (iosToolchain?.checks ?? [])
+              .filter((toolchainCheck) => toolchainCheck.name !== "ios-host")
+              .map((toolchainCheck) => ({
+                name: toolchainCheck.name,
+                ok: toolchainCheck.ok,
+                status: toolchainCheck.status,
+                value:
+                  toolchainCheck.fix && toolchainCheck.status !== "pass"
+                    ? `${toolchainCheck.value} · fix: ${toolchainCheck.fix}`
+                    : toolchainCheck.value,
+              }))
+          : (targetToolchain?.checks ?? []).map((toolchainCheck) => ({
+              name: toolchainCheck.name,
+              ok: toolchainCheck.ok,
+              status: toolchainCheck.status,
+              value:
+                toolchainCheck.fix && toolchainCheck.status !== "pass"
+                  ? `${toolchainCheck.value} · fix: ${toolchainCheck.fix}`
+                  : toolchainCheck.value,
+            }))),
       {
         name: "cloudflare-r2",
         ok: configuration.r2,
@@ -1052,36 +1401,49 @@ async function main(): Promise<void> {
           ? "configured"
           : "missing · fix: lynxship storage configure",
       },
-      {
-        name: doctorPlatform === "android" ? "android-signing" : "ios-host",
-        ok:
-          doctorPlatform === "android"
-            ? configuration.android
-            : process.platform === "darwin" && hasIosHost(root),
-        status: (
-          doctorPlatform === "android"
-            ? configuration.android
-            : process.platform === "darwin" && hasIosHost(root)
-        )
-          ? "pass"
-          : "fail",
-        value:
-          doctorPlatform === "android"
-            ? configuration.android
-              ? "configured"
-              : "missing · fix: lynxship android configure"
-            : process.platform === "darwin" && hasIosHost(root)
-              ? "Xcode host found"
-              : "missing · fix: use macOS, then lynxship ios host init --bundle-identifier com.example.myapp",
-      },
-      {
-        name: `lynx-autolink-${doctorPlatform}`,
-        ok: autolinkForPlatform.ready,
-        status: autolinkForPlatform.ready ? "pass" : "fail",
-        value: autolinkForPlatform.ready
-          ? autolinkForPlatform.reason
-          : `${autolinkForPlatform.reason} · fix: install the native plugin, then run autolink codegen`,
-      },
+      ...(doctorPlatform === "android"
+        ? [
+            {
+              name: "android-signing",
+              ok: configuration.android,
+              status: configuration.android
+                ? ("pass" as const)
+                : ("fail" as const),
+              value: configuration.android
+                ? "configured"
+                : "missing · fix: lynxship android configure",
+            },
+          ]
+        : doctorPlatform === "ios"
+          ? [
+              {
+                name: "ios-host",
+                ok: process.platform === "darwin" && hasIosHost(root),
+                status:
+                  process.platform === "darwin" && hasIosHost(root)
+                    ? ("pass" as const)
+                    : ("fail" as const),
+                value:
+                  process.platform === "darwin" && hasIosHost(root)
+                    ? "Xcode host found"
+                    : "missing · fix: use macOS, then lynxship ios host init --bundle-identifier com.example.myapp",
+              },
+            ]
+          : []),
+      ...(autolinkForPlatform
+        ? [
+            {
+              name: `lynx-autolink-${doctorPlatform}`,
+              ok: autolinkForPlatform.ready,
+              status: autolinkForPlatform.ready
+                ? ("pass" as const)
+                : ("fail" as const),
+              value: autolinkForPlatform.ready
+                ? autolinkForPlatform.reason
+                : `${autolinkForPlatform.reason} · fix: install the native plugin, then run autolink codegen`,
+            },
+          ]
+        : []),
     ];
     const result = {
       ok: checks.every((check) => check.status !== "fail"),
@@ -1091,6 +1453,7 @@ async function main(): Promise<void> {
     if (!result.ok) ui.warn("One or more environment checks failed");
     else if (hasWarnings)
       ui.warn("Environment is usable, but one recommendation needs attention");
+    if (!result.ok) process.exitCode = 1;
     printValue(result, {
       title: "Doctor result",
       rows: checks.map((check) => ({
@@ -1125,6 +1488,17 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (["devtool", "trace", "recorder"].includes(command)) {
+    const subcommand = args.shift() ?? "doctor";
+    assert(
+      subcommand === "doctor",
+      "CLI_DEVTOOL_COMMAND",
+      "Use `lynxship devtool doctor`, `lynxship trace doctor` or `lynxship recorder doctor`.",
+    );
+    await runDevToolDoctor(command as "devtool" | "trace" | "recorder");
+    return;
+  }
+
   if (command === "autolink") {
     const subcommand = args.shift() ?? "check";
     assert(
@@ -1136,7 +1510,7 @@ async function main(): Promise<void> {
       await runAutolinkCodegen();
       return;
     }
-    const platform = platformValue(flag("--platform", "android")!);
+    const platform = mobilePlatformValue(flag("--platform", "android")!);
     const status = (await inspectAutolink(root))[platform];
     printValue(status, {
       title: `Lynx Autolink · ${platform}`,
@@ -1170,7 +1544,7 @@ async function main(): Promise<void> {
       "CLI_OTA_COMMAND",
       "Only `lynxship ota doctor` is available",
     );
-    const platform = platformValue(flag("--platform", "android")!);
+    const platform = mobilePlatformValue(flag("--platform", "android")!);
     const status = await inspectOtaHost(root, platform);
     printValue(status, {
       title: `OTA host · ${platform}`,
@@ -1422,7 +1796,7 @@ async function main(): Promise<void> {
       "CLI_STORE_COMMAND",
       "Only store configure is available",
     );
-    const platform = platformValue(flag("--platform", "android")!);
+    const platform = mobilePlatformValue(flag("--platform", "android")!);
     ui.info(
       platform === "android"
         ? "Configuring Google Play submission. Secret fields will stay invisible…"
@@ -1469,7 +1843,7 @@ async function main(): Promise<void> {
 
   if (command === "submit") {
     const config = await loadConfig(root);
-    const platform = platformValue(flag("--platform", "android")!);
+    const platform = mobilePlatformValue(flag("--platform", "android")!);
     await requireOperationalConfiguration(platform);
     const credentials = await loadCredentials(root);
     const localMode =
@@ -1577,7 +1951,7 @@ async function main(): Promise<void> {
 
   if (command === "update" && args[0] !== "rollback") {
     const config = await loadConfig(root);
-    const platform = platformValue(flag("--platform", "android")!);
+    const platform = mobilePlatformValue(flag("--platform", "android")!);
     await requireOperationalConfiguration(platform);
     const projectId = configuredProjectId(config);
     const localMode =
@@ -1725,7 +2099,7 @@ async function main(): Promise<void> {
   ) {
     if (command === "update") args.shift();
     const config = await loadConfig(root);
-    const platform = platformValue(flag("--platform", "android")!);
+    const platform = mobilePlatformValue(flag("--platform", "android")!);
     const releaseId = flag("--release-id");
     const reason = flag("--reason");
     const channel = config.update?.channel ?? "production";
@@ -1820,6 +2194,12 @@ async function main(): Promise<void> {
   const buildAll = subcommand === "all" || platformArgument === "all";
   const platform = buildAll ? "android" : platformValue(platformArgument);
   const skipUpload = args.includes("--no-upload");
+  const allowUnsigned = args.includes("--allow-unsigned");
+  assert(
+    !allowUnsigned || skipUpload,
+    "CLI_UNSIGNED_UPLOAD_BLOCKED",
+    "--allow-unsigned is only available with --no-upload and can never upload an unsigned Desktop artifact.",
+  );
   await requireOperationalConfiguration(platform, { requireR2: !skipUpload });
   if (subcommand === "list") {
     printValue(builds.list());
@@ -1852,24 +2232,18 @@ async function main(): Promise<void> {
   const profile = flag("--profile", "production")!;
   const wait = !args.includes("--no-wait");
   const local = args.includes("--local");
-  const platforms: Platform[] = buildAll ? ["android", "ios"] : [platform];
+  const platforms: Platform[] = buildAll
+    ? ["android", "ios", "harmony", "web", "desktop"]
+    : [platform];
 
   if (buildAll && wait && !local) {
     assert(
       process.platform === "darwin",
       "BUILD_ALL_MACOS_REQUIRED",
-      "A real build for both Android and iOS requires macOS locally. Use `lynxship build --platform android` on Windows/Linux, or run this command on a macOS CI worker.",
+      "A real all-target build includes iOS and therefore requires macOS locally. Run supported targets individually on Windows/Linux, or use a macOS CI worker for the complete matrix.",
     );
-    assert(
-      await hasAndroidHost(root),
-      "ANDROID_HOST_REQUIRED",
-      "The Android host is required for `lynxship build --platform all`.",
-    );
-    assert(
-      hasIosHost(root, config.build?.[profile]),
-      "IOS_HOST_REQUIRED",
-      "The iOS Xcode host is required for `lynxship build --platform all`.",
-    );
+    for (const target of platforms)
+      await ensureNativeHostForBuild(target, profile, config);
   }
 
   if (!buildAll) {
@@ -1878,6 +2252,7 @@ async function main(): Promise<void> {
       profile,
       platform,
       skipUpload,
+      allowUnsigned,
       wait,
       local,
       state,
@@ -1890,17 +2265,19 @@ async function main(): Promise<void> {
 
   if (buildAll && wait && !local) await buildSharedLynxBundle();
 
-  const progress = ui.progress("Android + iOS build");
-  const progressValues: Record<Platform, number> = {
-    android: 0,
-    ios: 0,
-  };
-  const progressLabels: Record<Platform, string> = {
-    android: "Starting Android build…",
-    ios: "Starting iOS build…",
-  };
+  const progress = ui.progress("All Lynx targets build");
+  const progressValues: Partial<Record<Platform, number>> = {};
+  const progressLabels: Partial<Record<Platform, string>> = {};
   const platformName = (target: Platform): string =>
-    target === "android" ? "Android" : "iOS";
+    target === "android"
+      ? "Android"
+      : target === "ios"
+        ? "iOS"
+        : target === "harmony"
+          ? "HarmonyOS"
+          : target === "web"
+            ? "Web"
+            : "Desktop";
   const outcomes = await Promise.allSettled(
     platforms.map((target) =>
       executeBuild(
@@ -1909,6 +2286,7 @@ async function main(): Promise<void> {
           profile,
           platform: target,
           skipUpload,
+          allowUnsigned,
           wait,
           local,
           state,
@@ -1917,14 +2295,17 @@ async function main(): Promise<void> {
           submissions,
           progress,
           progressPrefix: platformName(target),
-          skipBundleBuild: wait && !local,
+          skipBundleBuild: wait && !local && target !== "web",
           onEvent: (message) =>
             progress.event(`${platformName(target)} · ${message}`),
           onProgress: (value, label) => {
             if (value !== undefined) progressValues[target] = value;
             if (label) progressLabels[target] = label;
             const average =
-              (progressValues.android + progressValues.ios) / platforms.length;
+              platforms.reduce(
+                (total, current) => total + (progressValues[current] ?? 0),
+                0,
+              ) / platforms.length;
             progress.update(
               average,
               `${platformName(target)} · ${progressLabels[target]}`,
@@ -1935,7 +2316,7 @@ async function main(): Promise<void> {
       ),
     ),
   );
-  progress.update(100, "Android and iOS builds finished");
+  progress.update(100, "All Lynx target builds finished");
   progress.stop();
 
   const summaryBuilds: Array<
@@ -1980,7 +2361,7 @@ async function main(): Promise<void> {
       })),
       done: failed
         ? "At least one platform build failed. Review its events and retry that platform."
-        : "Android and iOS build jobs completed. Submit each successful artifact separately.",
+        : "All Lynx target build jobs completed. Submit supported store artifacts separately.",
     },
   );
   for (const result of summaryBuilds)
@@ -1997,6 +2378,7 @@ function exitCode(error: unknown): number {
   const code = (error as { code?: string }).code;
   if (code?.startsWith("CLI_") || code?.startsWith("CONFIG_")) return 2;
   if (code === "BUILD_SIGNING_REQUIRED") return 2;
+  if (code === "DESKTOP_SIGNING_REQUIRED") return 2;
   if (code?.startsWith("AUTH_")) return 4;
   if (code?.startsWith("BUILD_")) return 5;
   if (code?.startsWith("SUBMISSION_")) return 6;

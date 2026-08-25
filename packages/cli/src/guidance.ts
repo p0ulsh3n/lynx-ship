@@ -56,10 +56,10 @@ const guidance: Record<string, CliGuidance> = {
     commands: [
       "lynxship dev",
       "lynxship android host init --application-id com.example.myapp",
+      "lynxship build --platform android --application-id com.example.myapp --profile production",
       "lynxship doctor --platform android",
-      "lynxship build --platform android --profile production",
     ],
-    note: "Use dev for Lynx Explorer. The host init path is required for a real APK/AAB; --local is only a contract test.",
+    note: "Interactive build creates a missing android/ host after asking for the application ID. CI must pass --application-id. Existing android/ directories are never overwritten.",
   },
   ANDROID_HOST_EXISTS: {
     commands: ["lynxship doctor --platform android"],
@@ -95,6 +95,99 @@ const guidance: Record<string, CliGuidance> = {
     commands: ["lynxship doctor --platform android", "adb devices"],
     note: "Install Android SDK Platform-Tools and connect or start a device.",
   },
+  ANDROID_TOOLCHAIN_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform android",
+      "lynxship doctor --platform android --fix",
+      "lynxship build --platform android --profile production",
+    ],
+    note: "The doctor detects the project AGP/Gradle contract and the required JDK, Android SDK packages and Build Tools. --fix installs only missing SDK packages after confirmation.",
+  },
+  WEB_CONFIGURATION_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform web",
+      "lynxship build --platform web --profile production",
+    ],
+    note: "Configure environments.web in lynx.config.* or provide the project's build:web script.",
+  },
+  WEB_BUNDLE_MISSING: {
+    commands: [
+      "lynxship doctor --platform web",
+      "lynxship build --platform web --profile production",
+    ],
+    note: "The official Web output is dist/*.web.bundle; check the Rspeedy Web environment and artifact path.",
+  },
+  HARMONY_HOST_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform harmony",
+      "lynxship build --platform harmony --profile production",
+    ],
+    note: "Use the official Lynx Harmony host; LynxShip does not invent a fake HAP host.",
+  },
+  HARMONY_TOOLCHAIN_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform harmony",
+      "lynxship build --platform harmony --profile production",
+    ],
+    note: "Install the DevEco/OpenHarmony SDK, expose ohpm and use the host's pinned hvigorw wrapper.",
+  },
+  HARMONY_SIGN_TOOL_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform harmony",
+      "lynxship build --platform harmony --profile production",
+    ],
+    note: "Set LYNXSHIP_HAP_SIGN_TOOL to the official hap-sign-tool.jar or configure build.<profile>.harmony.signTool.",
+  },
+  HARMONY_HDC_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform harmony",
+      "lynxship run --platform harmony --device <device-id>",
+      "lynxship logs --platform harmony --device <device-id>",
+    ],
+    note: "Install the OpenHarmony SDK platform tools and make hdc available on PATH.",
+  },
+  DESKTOP_HOST_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform desktop",
+      "lynxship build --platform desktop --profile production",
+    ],
+    note: "Use the official Lynxtron host and its electron-builder configuration or pack script.",
+  },
+  DESKTOP_ARTIFACT_MISSING: {
+    commands: [
+      "lynxship doctor --platform desktop",
+      "lynxship build --platform desktop --profile production",
+    ],
+    note: "Configure the Lynxtron pack script and set build.<profile>.desktop.artifact when output is not unique.",
+  },
+  DESKTOP_SIGNING_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform desktop",
+      "lynxship build --platform desktop --profile production",
+      "lynxship build --platform desktop --profile production --no-upload --allow-unsigned",
+    ],
+    note: "Production and uploaded Desktop artifacts must pass Windows Authenticode or Apple code-signature verification. Use --allow-unsigned only for local packaging tests together with --no-upload; it can never publish an unsigned artifact.",
+  },
+  TARGET_RUN_UNSUPPORTED: {
+    commands: [
+      "lynxship preview",
+      "lynxship run --platform android --artifact <apk>",
+      "lynxship run --platform harmony --artifact <hap>",
+    ],
+    note: "Web and desktop artifacts use their target runtime or operating-system installer; only device targets are installed by this command.",
+  },
+  TARGET_LOGS_UNSUPPORTED: {
+    commands: [
+      "lynxship dev",
+      "lynxship logs --platform android",
+      "lynxship logs --platform harmony",
+    ],
+    note: "Web and desktop logs come from their runtime tooling; LynxShip streams native device logs only.",
+  },
+  CLI_DOCTOR_FIX_PLATFORM: {
+    commands: ["lynxship doctor --platform android --fix"],
+    note: "The guided repair currently installs Android SDK packages only; JDK and Android Studio remain explicit developer installations.",
+  },
   LYNX_BUNDLE_MISSING: {
     commands: ["lynxship dev", "lynxship build --platform android"],
     note: "Build the Lynx bundle with the project's configured package manager.",
@@ -103,10 +196,10 @@ const guidance: Record<string, CliGuidance> = {
     commands: [
       "lynxship dev",
       "lynxship ios host init --bundle-identifier com.example.myapp",
+      "lynxship build --platform ios --bundle-identifier com.example.myapp --profile production",
       "lynxship doctor --platform ios",
-      "lynxship build --platform ios --profile production",
     ],
-    note: "Use dev for Lynx Explorer. A real IPA requires macOS, Xcode and an iOS host.",
+    note: "Interactive build creates a missing ios/ host after asking for the bundle identifier. CI must pass --bundle-identifier. Existing ios/ directories are never overwritten.",
   },
   IOS_HOST_EXISTS: {
     commands: ["lynxship doctor --platform ios"],
@@ -126,6 +219,14 @@ const guidance: Record<string, CliGuidance> = {
   },
   IOS_XCRUN_REQUIRED: {
     commands: ["xcode-select --install", "lynxship doctor --platform ios"],
+  },
+  IOS_TOOLCHAIN_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform ios",
+      "lynxship ios host init --bundle-identifier com.example.myapp",
+      "lynxship build --platform ios --profile production",
+    ],
+    note: "The iOS doctor checks macOS, Xcode, xcrun, CocoaPods, Xcode settings, Apple signing identities, provisioning and export options without printing certificate contents.",
   },
   IOS_COCOAPODS_REQUIRED: {
     commands: ["brew install cocoapods", "lynxship build --platform ios"],
@@ -258,6 +359,14 @@ const guidance: Record<string, CliGuidance> = {
       "lynxship build --platform ios --profile production",
     ],
     note: "Check the Apple certificate, provisioning profile, team and export options.",
+  },
+  CLI_DEVTOOL_COMMAND: {
+    commands: [
+      "lynxship devtool doctor --platform android",
+      "lynxship trace doctor --platform android",
+      "lynxship recorder doctor --platform android",
+    ],
+    note: "Lynx Trace and Recorder are operated from Lynx DevTool Desktop after the native -dev runtime is integrated.",
   },
 };
 

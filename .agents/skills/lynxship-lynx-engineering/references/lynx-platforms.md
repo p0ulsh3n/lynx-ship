@@ -49,8 +49,9 @@ Elements + Native Modules + Services available to the host
 ```
 
 Run the project's official codegen command from the library root. Verify both
-platform declarations and generated files; do not hand-edit generated output
-unless the upstream tool explicitly requires it.
+platform declarations, source directories, podspecs, generated files and
+duplicate annotated capabilities; do not hand-edit generated output unless
+the upstream tool explicitly requires it.
 
 ## Native modules, elements and services
 
@@ -67,8 +68,11 @@ facade against both the generated Android and iOS bindings when applicable.
 - [Lynx debugging and error handling](https://lynxjs.org/next/guide/devtool/handle-errors.html)
 - [Performance/trace index](https://lynxjs.org/guide/spec.html)
 
-Use DevTool or native logs to prove a runtime issue. A successful Rspeedy
-bundle only proves compilation; it does not prove native registration,
+Use `lynxship devtool doctor`, `lynxship trace doctor` or
+`lynxship recorder doctor` for project-side prerequisites, then use the
+official DevTool Desktop application or native logs to prove a runtime issue.
+Trace and Recorder require the matching Lynx `-dev` runtime. A successful
+Rspeedy bundle only proves compilation; it does not prove native registration,
 device permissions, platform services, or runtime behavior.
 
 ## OTA boundary
@@ -78,3 +82,26 @@ and assets. Before changing OTA logic, inspect the project's runtime
 fingerprint inputs and the [Lynx native integration guide](https://lynxjs.org/guide/start/integrate-with-existing-apps.html).
 Native code, permissions, linked libraries, host configuration and Autolink
 registries are binary changes, not OTA-only changes.
+
+## HarmonyOS, Web, and Desktop routing
+
+These targets have different contracts and must not be treated as Android/iOS
+aliases:
+
+- HarmonyOS uses the official [Harmony integration guide](https://lynxjs.org/next/guide/start/integrate-with-existing-apps.html),
+  `oh-package.json5`, the project `hvigorw` wrapper and HAP signing. Bundle
+  resources belong under `entry/src/main/resources/rawfile`. Use the official
+  [OpenHarmony HAP signer](https://github.com/openharmony/developtools_hapsigner)
+  `verify-app` operation to verify a signed result.
+- Web uses [Rspeedy's Web integration](https://lynxjs.org/3.6/rspeedy/start/integrate-with-existing-apps)
+  and the `web` environment. The expected production output is
+  `dist/main.web.bundle` (or the project's explicitly configured artifact).
+- Desktop uses the current [Lynxtron](https://lynxjs.org/next/lynxtron/api/%40lynx-js/create-lynxtron/index.html)
+  host and [lynxtron-builder](https://lynxjs.org/next/lynxtron/api/%40lynx-js/lynxtron-builder/index.html),
+  which delegates packaging to the project's electron-builder configuration.
+  Desktop support and platform coverage are still evolving; check the current
+  target OS and builder documentation before claiming store readiness.
+
+LynxShip can validate these host/configuration contracts and run their real
+build commands. It must fail when the official host, SDK, signer, or output is
+missing; it must never create a placeholder HAP, Web bundle, or installer.

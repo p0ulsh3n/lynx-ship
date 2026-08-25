@@ -134,6 +134,7 @@ test("Autolink requires the official host plugins when a Lynx native library is 
       platforms: { android: { packageName: "example.camera" } },
     }),
   );
+  await mkdir(join(library, "android"), { recursive: true });
   await mkdir(join(root, "android", "app"), { recursive: true });
   await writeFile(
     join(root, "android", "settings.gradle"),
@@ -159,6 +160,37 @@ test("Autolink requires the official host plugins when a Lynx native library is 
   );
   const ready = await inspectAutolink(root);
   assert.equal(ready.android.ready, true);
+});
+
+test("Autolink validates native source directories and duplicate capabilities", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lynxship-autolink-duplicates-"));
+  const first = join(root, "node_modules", "@example", "first");
+  const second = join(root, "node_modules", "@example", "second");
+  for (const library of [first, second]) {
+    await mkdir(join(library, "android"), { recursive: true });
+    await writeFile(
+      join(library, "lynx.lib.json"),
+      JSON.stringify({
+        platforms: { android: { packageName: "example.library" } },
+      }),
+    );
+    await writeFile(
+      join(library, "android", "Module.java"),
+      '@LynxNativeModule("SharedModule")\nclass Module {}\n',
+    );
+  }
+  await mkdir(join(root, "android", "app"), { recursive: true });
+  await writeFile(
+    join(root, "android", "settings.gradle"),
+    "plugins { id 'org.lynxsdk.library-settings' }\n",
+  );
+  await writeFile(
+    join(root, "android", "app", "build.gradle"),
+    "plugins { id 'org.lynxsdk.library-build' }\n",
+  );
+  const status = await inspectAutolink(root);
+  assert.equal(status.android.ready, false);
+  assert.match(status.android.reason, /duplicate android native capability/);
 });
 test("tokens are shown once, scoped and revocable", () => {
   const manager = new TokenManager();

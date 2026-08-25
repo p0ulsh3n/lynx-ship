@@ -4,6 +4,12 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import {
+  hasDesktopHost,
+  resolveDesktopPackScript,
+} from "../packages/cli/src/desktop-build.js";
+import { inspectDesktopSigning } from "../packages/cli/src/desktop-signing.js";
+import { detectWebBuildScript } from "../packages/cli/src/web-build.js";
 
 function runCli(
   cwd: string,
@@ -65,8 +71,8 @@ test("TypeScript CLI init/build/update use persistent local state", async () => 
   assert.deepEqual(realBuildError.nextSteps, [
     "lynxship dev",
     "lynxship android host init --application-id com.example.myapp",
+    "lynxship build --platform android --application-id com.example.myapp --profile production",
     "lynxship doctor --platform android",
-    "lynxship build --platform android --profile production",
   ]);
   const build = await runCli(
     cwd,
@@ -121,7 +127,7 @@ test("TypeScript CLI init/build/update use persistent local state", async () => 
   );
 });
 
-test("build all creates Android and iOS contract jobs", async () => {
+test("build all creates one contract job for every supported Lynx target", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "lynxship-build-all-"));
   const keystore = join(cwd, "test-signing.jks");
   await writeFile(keystore, "test keystore placeholder");
@@ -154,8 +160,113 @@ test("build all creates Android and iOS contract jobs", async () => {
     [
       ["android", "success"],
       ["ios", "success"],
+      ["harmony", "success"],
+      ["web", "success"],
+      ["desktop", "success"],
     ],
   );
+});
+
+test("target diagnostics and real-build guards cover Web, HarmonyOS and Desktop", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-targets-"));
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({
+      scripts: { build: "rspeedy build" },
+      dependencies: { "@lynx-js/rspeedy": "4.0.0" },
+    }),
+  );
+  await writeFile(join(cwd, "package-lock.json"), "{}\n");
+  await writeFile(
+    join(cwd, "lynx.config.ts"),
+    "export default { environments: { web: {} } };\n",
+  );
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    CLOUDFLARE_ACCOUNT_ID: "0".repeat(32),
+    R2_BUCKET: "test",
+    R2_ACCESS_KEY_ID: "test-access-key",
+    R2_SECRET_ACCESS_KEY: "test-secret-key",
+    LYNXSHIP_KEYSTORE_PATH: join(cwd, "missing.jks"),
+    LYNXSHIP_KEY_ALIAS: "test",
+    LYNXSHIP_KEYSTORE_PASSWORD: "test-password",
+    LYNXSHIP_KEY_PASSWORD: "test-password",
+  };
+  const init = await runCli(cwd, ["init", "--non-interactive", "--json"]);
+  assert.equal(init.code, 0);
+
+  const webDoctor = await runCli(
+    cwd,
+    ["doctor", "--platform", "web", "--json"],
+    environment,
+  );
+  assert.equal(webDoctor.code, 0);
+  assert.match(webDoctor.stdout, /web-configuration/);
+  assert.match(webDoctor.stdout, /web-build-tool/);
+
+  for (const platform of ["harmony", "desktop"]) {
+    const result = await runCli(
+      cwd,
+      ["build", "--platform", platform, "--json"],
+      environment,
+    );
+    assert.equal(result.code, 1);
+    const error = JSON.parse(result.stdout) as { code: string };
+    assert.equal(
+      error.code,
+      platform === "harmony"
+        ? "HARMONY_HOST_REQUIRED"
+        : "DESKTOP_HOST_REQUIRED",
+    );
+  }
+});
+
+test("recognizes current Lynx Web and Electron desktop script conventions", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-platform-scripts-"));
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({
+      scripts: {
+        "build:web": "rspeedy build -c ./config/lynx.web.ts",
+        "build:app": "electron-builder",
+      },
+      devDependencies: { "electron-builder": "26.0.12" },
+    }),
+  );
+  const manifest = JSON.parse(
+    await readFile(join(cwd, "package.json"), "utf8"),
+  ) as {
+    scripts: Record<string, string>;
+    devDependencies: Record<string, string>;
+  };
+  assert.equal(detectWebBuildScript(cwd), "build:web");
+  assert.equal(resolveDesktopPackScript(manifest), "build:app");
+  assert.equal(await hasDesktopHost(cwd), true);
+
+  const signing = await inspectDesktopSigning(cwd);
+  assert.ok(["missing", "unknown", "not-required"].includes(signing.status));
+});
+
+test("does not allow unsigned Desktop artifacts to be uploaded", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-desktop-signing-"));
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({
+      scripts: { pack: "node -e \\\"console.log('pack')\\\"" },
+      devDependencies: { "electron-builder": "26.0.12" },
+    }),
+  );
+  const init = await runCli(cwd, ["init", "--non-interactive", "--json"]);
+  assert.equal(init.code, 0);
+  const result = await runCli(cwd, [
+    "build",
+    "--platform",
+    "desktop",
+    "--allow-unsigned",
+    "--json",
+  ]);
+  assert.equal(result.code, 2);
+  assert.equal(JSON.parse(result.stdout).code, "CLI_UNSIGNED_UPLOAD_BLOCKED");
 });
 
 test("android host init scaffolds a native host without overwriting projects", async () => {
@@ -211,6 +322,49 @@ test("android host init scaffolds a native host without overwriting projects", a
   ]);
   assert.equal(second.code, 1);
   assert.equal(JSON.parse(second.stdout).code, "ANDROID_HOST_EXISTS");
+});
+
+test("real Android build bootstraps a missing host before bundle execution", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-build-host-bootstrap-"));
+  const keystore = join(cwd, "test-signing.jks");
+  await writeFile(keystore, "test keystore placeholder");
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({
+      name: "host-bootstrap",
+      scripts: { build: "rspeedy build" },
+      devDependencies: { "@lynx-js/rspeedy": "0.16.5" },
+    }),
+  );
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    ANDROID_SDK_ROOT: join(cwd, "missing-android-sdk"),
+    LYNXSHIP_KEYSTORE_PATH: keystore,
+    LYNXSHIP_KEY_ALIAS: "test",
+    LYNXSHIP_KEYSTORE_PASSWORD: "test-password",
+    LYNXSHIP_KEY_PASSWORD: "test-password",
+  };
+  const result = await runCli(
+    cwd,
+    [
+      "build",
+      "--platform",
+      "android",
+      "--application-id",
+      "com.example.bootstrap",
+      "--no-upload",
+      "--non-interactive",
+      "--json",
+    ],
+    environment,
+  );
+  assert.equal(result.code, 1);
+  assert.equal(JSON.parse(result.stdout).code, "CLI_ERROR");
+  assert.match(result.stdout, /rspeedy/);
+  assert.match(
+    await readFile(join(cwd, "android", "app", "build.gradle"), "utf8"),
+    /com\.example\.bootstrap/,
+  );
 });
 
 test("ios host init scaffolds an Xcode host without overwriting projects", async () => {
@@ -362,6 +516,52 @@ test("CLI never fabricates an iOS build on a non-macOS host", async () => {
     assert.notEqual(result.code, 0);
   } else {
     assert.equal(result.code, 1);
-    assert.equal(JSON.parse(result.stdout).code, "IOS_HOST_REQUIRED");
+    assert.equal(JSON.parse(result.stdout).code, "IOS_MACOS_REQUIRED");
   }
+});
+
+test("DevTool doctor reports the development runtime contract", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-devtool-"));
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({
+      name: "devtool-doctor",
+      scripts: { dev: "rspeedy dev" },
+      devDependencies: { "@lynx-js/rspeedy": "0.16.5" },
+    }),
+  );
+  const result = await runCli(cwd, ["trace", "doctor", "--json"]);
+  assert.equal(result.code, 1);
+  const parsed = JSON.parse(result.stdout) as {
+    requested: string;
+    ready: boolean;
+    checks: Array<{ name: string; status: string }>;
+  };
+  assert.equal(parsed.requested, "trace");
+  assert.equal(parsed.ready, false);
+  assert.equal(
+    parsed.checks.find((check) => check.name === "android-trace-runtime")
+      ?.status,
+    "fail",
+  );
+});
+
+test("iOS doctor reports the macOS prerequisite before an iOS build", async () => {
+  if (process.platform === "darwin") return;
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-ios-doctor-"));
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({ name: "ios-doctor" }),
+  );
+  await writeFile(join(cwd, "package-lock.json"), "{}\n");
+  const result = await runCli(cwd, ["doctor", "--platform", "ios", "--json"]);
+  assert.equal(result.code, 1);
+  const parsed = JSON.parse(result.stdout) as {
+    checks: Array<{ name: string; status: string; value: string }>;
+  };
+  const platformCheck = parsed.checks.find(
+    (check) => check.name === "ios-platform",
+  );
+  assert.equal(platformCheck?.status, "fail");
+  assert.match(platformCheck?.value ?? "", /macOS/);
 });

@@ -12,6 +12,7 @@ build/
 
 # External community example kept as its own repository.
 examples/lynx-community-crossplatform/
+examples/lynx-official-examples/
 
 # Local credentials and provider configuration. Never commit these files.
 .credentials.dpapi.json

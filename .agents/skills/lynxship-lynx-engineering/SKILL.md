@@ -1,6 +1,6 @@
 ---
 name: lynxship-lynx-engineering
-description: Develop, integrate, debug, and test LynxJS applications and their Android or iOS native hosts in LynxShip using current official Lynx and Rspeedy guidance.
+description: Develop, integrate, debug, and test LynxJS applications and their Android, iOS, HarmonyOS, Web, or Desktop hosts in LynxShip using current official Lynx, Rspeedy, Lynxtron, and platform guidance.
 metadata:
   short-description: LynxJS, Rspeedy, native hosts, modules, and autolinking
 ---
@@ -8,7 +8,7 @@ metadata:
 # LynxShip Lynx engineering
 
 Use this skill for any change involving a LynxJS bundle, Rspeedy/Rspack
-configuration, Lynx Explorer, DevTool, Android or iOS host integration,
+configuration, Lynx Explorer, DevTool, Android, iOS, HarmonyOS, Web, or Desktop host integration,
 native modules, custom elements, services, Autolink, or OTA runtime
 compatibility.
 
@@ -21,8 +21,10 @@ compatibility.
    posts.
 2. Keep the two layers distinct:
    - a pure Lynx/Rspeedy project produces `dist/*.lynx.bundle`;
-   - an Android or iOS native host embeds `LynxView`, initializes Lynx, loads
-     the bundle, and owns platform packaging/signing.
+   - an Android, iOS, or HarmonyOS native host embeds `LynxView`, initializes
+     Lynx, loads the bundle, and owns platform packaging/signing;
+   - Web uses the official Rspeedy Web environment and Desktop uses Lynxtron;
+     neither target may be represented by a fabricated native host.
      Lynx Explorer is a development host; it is not a production APK or IPA.
 3. Never fabricate a native artifact. If a required host, SDK, Xcode tool,
    signing identity, provisioning profile, or bundle is absent, fail with a
@@ -44,26 +46,39 @@ compatibility.
   `lynxship dev`, and use the QR URL with Lynx Explorer.
 - Android production host or APK/AAB: read
   [references/native-integration.md](references/native-integration.md), use
-  `lynxship android host init` only for a project without `android/`, then
-  verify Gradle, SDK, the release variant, and signing.
+  `lynxship android host init` or the interactive build host bootstrap only
+  for a project without `android/`, then verify Gradle, SDK, the release
+  variant, and signing.
 - iOS production host or IPA: read the iOS section of
   [references/native-integration.md](references/native-integration.md), use
-  `lynxship ios host init` only for a project without `ios/`, then verify
+  `lynxship ios host init` or the interactive build host bootstrap only for a
+  project without `ios/`, then verify
   CocoaPods, Xcode, archive/export settings, and Apple signing on macOS.
+- HarmonyOS HAP: read the current Harmony integration, use the official
+  `harmony/` host, `ohpm`, its pinned `hvigorw` wrapper, and the official HAP
+  signing verifier.
+- Web bundle: read the current Rspeedy Web integration and verify the
+  configured `dist/*.web.bundle` output.
+- Desktop package: read the current Lynxtron and lynxtron-builder guidance and
+  use the project's electron-builder configuration for packaging/signing.
 - Native library, module, element, or service: read the Autolink and native
   module sections of [references/lynx-platforms.md](references/lynx-platforms.md),
   inspect `lynx.lib.json`, run codegen, and test both Android and iOS when the
   library declares both platforms.
 - Rendering, runtime, or device debugging: read
   [references/verification.md](references/verification.md) and use Lynx
-  DevTool/official device diagnostics instead of guessing from a bundle.
+  DevTool/official device diagnostics instead of guessing from a bundle. Run
+  `lynxship devtool doctor`, `lynxship trace doctor` or
+  `lynxship recorder doctor` to verify the project-side prerequisites; the
+  official DevTool Desktop application remains responsible for recording and
+  analysis.
 
 ## Required validation before handoff
 
 Run the smallest relevant checks first, then the repository checks:
 
 ```text
-lynxship doctor --platform android|ios
+lynxship doctor --platform android|ios|harmony|web|desktop
 lynxship autolink check --platform android|ios
 lynxship ota doctor --platform android|ios
 pnpm check

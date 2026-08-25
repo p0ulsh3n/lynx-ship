@@ -178,6 +178,23 @@ jobs:
           pnpm install --frozen-lockfile --reporter=append-only
       - name: Build CLI
         run: pnpm --filter @lynxship/cli build
+      - name: Verify real iOS builds never fall back to a fake artifact
+        shell: bash
+        run: |
+          set +e
+          build_output="$(node packages/cli/dist/index.js build \
+            --project-dir examples/lynx-basic-template \
+            --platform ios --profile production --no-upload --json --non-interactive)"
+          status=$?
+          set -e
+          printf '%s\n' "$build_output"
+          test "$status" -eq 1
+          BUILD_OUTPUT="$build_output" node <<'NODE'
+          const result = JSON.parse(process.env.BUILD_OUTPUT);
+          if (result.code !== "IOS_HOST_REQUIRED") {
+            throw new Error(`Expected IOS_HOST_REQUIRED, received ${result.code}`);
+          }
+          NODE
       - name: Generate and compile the LynxShip iOS host
         shell: bash
         run: |
@@ -209,29 +226,7 @@ jobs:
           DOCTOR_OUTPUT="$doctor_output" node <<'NODE'
           const result = JSON.parse(process.env.DOCTOR_OUTPUT);
           const host = result.checks.find((check) => check.name === "ios-host");
-          if (!host || host.status !== "fail") {
-            throw new Error("The iOS doctor must report a missing native host.");
-          }
-          NODE
-      - name: Verify real iOS builds never fall back to a fake artifact
-        shell: bash
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.LYNXSHIP_R2_ACCOUNT_ID || '00000000000000000000000000000000' }}
-          R2_BUCKET: ${{ secrets.LYNXSHIP_R2_BUCKET || 'lynxship-ci' }}
-          R2_ACCESS_KEY_ID: ${{ secrets.LYNXSHIP_R2_ACCESS_KEY_ID || 'ci-test-access' }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.LYNXSHIP_R2_SECRET_ACCESS_KEY || 'ci-test-secret' }}
-        run: |
-          set +e
-          build_output="$(node packages/cli/dist/index.js build \
-            --project-dir examples/lynx-basic-template \
-            --platform ios --profile production --json --non-interactive)"
-          status=$?
-          set -e
-          printf '%s\n' "$build_output"
-          test "$status" -eq 1
-          BUILD_OUTPUT="$build_output" node <<'NODE'
-          const result = JSON.parse(process.env.BUILD_OUTPUT);
-          if (result.code !== "IOS_HOST_REQUIRED") {
-            throw new Error(`Expected IOS_HOST_REQUIRED, received ${result.code}`);
+          if (!host || host.status !== "pass") {
+            throw new Error("The iOS doctor must report the generated Xcode host as ready.");
           }
           NODE

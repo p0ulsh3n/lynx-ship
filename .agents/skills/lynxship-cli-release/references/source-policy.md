@@ -10,9 +10,14 @@ this checkout. Record important URLs and dates in the PR or handoff.
 
 - [Lynx](https://lynxjs.org/)
 - [Rspeedy CLI](https://lynxjs.org/4.0/rspeedy/cli.html)
+- [Rspeedy Web integration](https://lynxjs.org/3.6/rspeedy/start/integrate-with-existing-apps)
+- [Lynx Harmony integration](https://lynxjs.org/next/guide/start/integrate-with-existing-apps.html)
+- [Lynxtron](https://lynxjs.org/next/lynxtron/api/%40lynx-js/create-lynxtron/index.html)
+- [Lynxtron builder](https://lynxjs.org/next/lynxtron/api/%40lynx-js/lynxtron-builder/index.html)
 - [Android/iOS integration](https://lynxjs.org/guide/start/integrate-with-existing-apps.html)
 - [Autolink](https://lynxjs.org/guide/autolink)
 - [Official native integration demos](https://github.com/lynx-family/integrating-lynx-demo-projects)
+- [OpenHarmony HAP signer](https://github.com/openharmony/developtools_hapsigner)
 
 ### Android and JavaScript toolchain
 

@@ -11,13 +11,17 @@ is:
 ```text
 init                         Initialize or link a project
 doctor                       Check the local toolchain and project
+doctor --fix                 Install missing Android SDK packages after confirmation
 dev / preview                Run or preview Rspeedy
 inspect / profile            Inspect or profile Rspeedy configuration
+devtool doctor               Check Lynx DevTool and development runtime
+trace doctor                 Check Lynx Trace prerequisites
+recorder doctor              Check Lynx Recorder prerequisites
 autolink check               Check native-library wiring
 autolink codegen             Run native-module codegen
 ota doctor                   Check native OTA host integration
 build create                 Build, sign and upload an artifact
-build all                    Build Android and iOS on macOS
+build all                    Build Android, iOS, HarmonyOS, Web and Desktop
 build list/status             Inspect build jobs
 build cancel/retry            Manage a build job
 run / logs                   Install an artifact or stream native logs
@@ -35,16 +39,78 @@ store configure              Configure Google Play or App Store Connect
 does not start Docker; self-host operators explicitly run `lynxship self-host
 init` and `docker compose up -d`.
 
+`lynxship doctor --platform android --fix` is an interactive repair command. It
+uses the Android SDK's `sdkmanager` to install only project-required missing
+packages after confirmation, then optionally accepts SDK licenses. It never
+silently installs Android Studio/JDK or rewrites a project's Gradle files.
+
+The doctor reads `android/gradle/wrapper/gradle-wrapper.properties` and the
+project's AGP declaration. It checks the official AGP/Gradle minimum, so an
+error such as AGP 8.7 with Gradle 8.7 points to the exact wrapper mismatch
+instead of asking the developer to install an unrelated global Gradle.
+
+On macOS, `lynxship doctor --platform ios` also checks the active Xcode
+developer directory, Xcode/`xcodebuild`, `xcrun`, `codesign`, the Xcode host and
+scheme, build settings, Apple signing identity, CocoaPods when a `Podfile`
+exists, export options and provisioning profiles. It never prints private key,
+certificate or profile contents. A manual signing configuration without a
+valid matching profile fails before the archive; automatic Xcode signing is
+reported as such and may obtain a profile during the build.
+
 `lynxship build --no-upload` is intended for CI toolchain verification. It
 performs the real native build and signature verification, keeps the UUID-named
 artifact locally, and skips only the Cloudflare R2 transfer. Android builds are
 allowed on Linux, macOS and Windows; iOS builds are allowed only on macOS.
 
-`lynxship build --platform all` creates and runs both native builds
-concurrently after producing one shared Lynx bundle. Each platform has an
-independent job, progress stream and artifact. A real local all-platform build
-requires macOS, an Android host and an iOS Xcode host; Windows and Linux remain
-valid for Android-only builds.
+`lynxship build --platform all` creates one independent job per supported target
+and runs the real adapters concurrently after the shared Lynx bundle stage.
+Android and iOS use their native hosts; HarmonyOS uses the official Hvigor
+host; Web uses the Rspeedy Web environment; Desktop uses Lynxtron. A real
+all-platform build requires macOS because the iOS job requires Xcode. On
+Windows or Linux, run the supported targets individually or use a macOS CI
+worker for the complete set. Missing official host/configuration files fail
+with target-specific repair commands; no fake artifact is created.
+
+## Additional target adapters
+
+```text
+lynxship doctor --platform web
+lynxship build --platform web --profile production
+
+lynxship doctor --platform harmony
+lynxship build --platform harmony --profile production
+lynxship run --platform harmony --artifact <signed-hap>
+lynxship logs --platform harmony --device <device-id>
+
+lynxship doctor --platform desktop
+lynxship build --platform desktop --profile production
+```
+
+Web requires `lynx.config.*` with the official `environments.web` setup or an
+explicit `build:web` script and verifies `dist/*.web.bundle`. HarmonyOS
+requires the official `harmony/` host, `ohpm`, the pinned `hvigorw` wrapper and
+`hap-sign-tool.jar`; the HAP must be signed and passes the official
+`verify-app` check. Desktop requires Lynxtron/electron-builder packaging and a
+real `.dmg`, `.exe`, `.appimage` or `.zip` output. These adapters inspect and
+use project-owned configuration instead of inventing native integrations. On
+Windows, `doctor` checks for Authenticode signing input and the build verifies
+the final `.exe`; macOS uses `codesign` verification when an app bundle is
+available. Production or uploaded artifacts stop when signing cannot be
+verified. `--allow-unsigned --no-upload` is reserved for local packaging tests.
+
+## DevTool, Trace and Recorder
+
+```text
+lynxship devtool doctor --platform android
+lynxship trace doctor --platform android
+lynxship recorder doctor --platform android
+```
+
+These diagnostics verify the Rspeedy development script, the native DevTool,
+Trace and Recorder dependencies and USB transport. They do not reimplement the
+official Lynx DevTool Desktop application or undocumented CDP behavior. Lynx's
+release runtime excludes Trace and Recorder, so the matching `-dev` runtime is
+required for those workflows.
 
 ## Tokens
 

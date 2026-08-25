@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { packageManagerScriptCommand, runProcess } from "./process-runner.js";
+import {
+  packageManagerScriptCommand,
+  runProcess,
+  runRspeedy,
+} from "./process-runner.js";
 
 interface PackageManifest {
   scripts?: Record<string, string>;
@@ -10,6 +14,8 @@ export interface BundleBuildOptions {
   env?: NodeJS.ProcessEnv;
   quiet?: boolean;
   onOutput?: (line: string) => void;
+  script?: string;
+  rspeedyArgs?: string[];
 }
 
 async function resolveBundleScript(root: string): Promise<string> {
@@ -28,8 +34,20 @@ export async function buildLynxBundle(
   root: string,
   options: BundleBuildOptions = {},
 ): Promise<void> {
-  const script = await resolveBundleScript(root);
-  const packageManager = packageManagerScriptCommand(root, script);
+  if (!options.script && options.rspeedyArgs) {
+    await runRspeedy(root, "build", options.rspeedyArgs, {
+      env: options.env,
+      quiet: options.quiet,
+      onOutput: options.onOutput,
+    });
+    return;
+  }
+  const script = options.script ?? (await resolveBundleScript(root));
+  const packageManager = packageManagerScriptCommand(
+    root,
+    script,
+    options.rspeedyArgs ?? [],
+  );
   await runProcess(packageManager.command, packageManager.args, {
     cwd: root,
     env: options.env,
