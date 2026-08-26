@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { validateLynxShipExpoConfig } from "../packages/expo/dist/config.js";
+import assetSync from "../packages/expo/asset-sync.cjs";
 
 const root = join(import.meta.dirname, "..", "packages", "expo");
 const fixture = join(import.meta.dirname, "..", "examples", "expo-lynx-ota");
@@ -11,6 +13,8 @@ test("Expo configuration defaults are deterministic and safe", () => {
   assert.deepEqual(validateLynxShipExpoConfig({}), {
     channel: "production",
     embeddedBundle: "main.lynx.bundle",
+    bundlePath: "dist/main.lynx.bundle",
+    syncBundle: true,
     lynxVersion: "auto",
   });
   assert.throws(
@@ -27,6 +31,10 @@ test("Expo configuration defaults are deterministic and safe", () => {
   assert.throws(
     () => validateLynxShipExpoConfig({ lynxVersion: "not-a-version" }),
     /semver/,
+  );
+  assert.throws(
+    () => validateLynxShipExpoConfig({ syncBundle: "yes" as never }),
+    /syncBundle/,
   );
 });
 
@@ -75,4 +83,96 @@ test("Expo fixture keeps the native plugin and bundle contract visible", async (
   assert.ok(plugin);
   assert.equal(plugin[1].embeddedBundle, "main.lynx.bundle");
   assert.match(await readFile(join(fixture, "App.tsx"), "utf8"), /LynxView/);
+});
+
+test("Expo bundle sync copies the full Rspeedy output and is idempotent", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lynxship-expo-assets-"));
+  try {
+    await writeFile(join(root, "dist-main.lynx.bundle"), "bundle-v1");
+    await mkdir(join(root, "dist", "static"), { recursive: true });
+    await writeFile(join(root, "dist", "main.lynx.bundle"), "bundle-v1");
+    await writeFile(join(root, "dist", "static", "logo.png"), "asset-v1");
+    await mkdir(join(root, "android", "app", "src", "main", "assets"), {
+      recursive: true,
+    });
+
+    const plan = await assetSync.createBundlePlan(root, {});
+    const first = await assetSync.syncBundleDirectory({
+      projectRoot: root,
+      plan,
+      destinationRoot: join(root, "android", "app", "src", "main", "assets"),
+      manifestPath: join(root, "android", ".lynxship-assets.json"),
+      platform: "android",
+    });
+    const second = await assetSync.syncBundleDirectory({
+      projectRoot: root,
+      plan,
+      destinationRoot: join(root, "android", "app", "src", "main", "assets"),
+      manifestPath: join(root, "android", ".lynxship-assets.json"),
+      platform: "android",
+    });
+    assert.equal(first.files.length, 2);
+    assert.deepEqual(second.files, first.files);
+    assert.equal(
+      await readFile(
+        join(
+          root,
+          "android",
+          "app",
+          "src",
+          "main",
+          "assets",
+          "main.lynx.bundle",
+        ),
+        "utf8",
+      ),
+      "bundle-v1",
+    );
+    assert.equal(
+      await readFile(
+        join(
+          root,
+          "android",
+          "app",
+          "src",
+          "main",
+          "assets",
+          "static",
+          "logo.png",
+        ),
+        "utf8",
+      ),
+      "asset-v1",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("Expo bundle sync never overwrites an unmanaged native asset", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lynxship-expo-conflict-"));
+  try {
+    await mkdir(join(root, "dist"), { recursive: true });
+    await mkdir(join(root, "android", "app", "src", "main", "assets"), {
+      recursive: true,
+    });
+    await writeFile(join(root, "dist", "main.lynx.bundle"), "bundle");
+    await writeFile(
+      join(root, "android", "app", "src", "main", "assets", "main.lynx.bundle"),
+      "developer-owned",
+    );
+    const plan = await assetSync.createBundlePlan(root, {});
+    await assert.rejects(
+      assetSync.syncBundleDirectory({
+        projectRoot: root,
+        plan,
+        destinationRoot: join(root, "android", "app", "src", "main", "assets"),
+        manifestPath: join(root, "android", ".lynxship-assets.json"),
+        platform: "android",
+      }),
+      /unmanaged android asset/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
