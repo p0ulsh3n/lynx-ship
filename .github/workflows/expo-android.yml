@@ -96,17 +96,6 @@ jobs:
         run: |
           fixture="$RUNNER_TEMP/lynxship-expo-android"
           npx --yes create-expo-app@latest "$fixture" --template blank-typescript --no-install
-          node - "$fixture" <<'NODE'
-          const fs = require("node:fs");
-          const path = require("node:path");
-          const fixture = process.argv[2];
-          const file = path.join(fixture, "app.json");
-          const config = JSON.parse(fs.readFileSync(file, "utf8"));
-          config.expo.plugins = [
-            ["@lynxship/expo", { lynxVersion: "auto" }],
-          ];
-          fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
-          NODE
           cat "$fixture/app.json"
 
       - name: Install Expo and the local LynxShip packages
@@ -117,8 +106,15 @@ jobs:
           npm install --no-audit --no-fund
           npm install --no-audit --no-fund \
             "$RUNNER_TEMP/lynxship-sdk-android-0.1.0.tgz" \
-            "$RUNNER_TEMP/lynxship-sdk-ios-0.1.0.tgz" \
-            "$RUNNER_TEMP/lynxship-expo-0.1.0.tgz"
+            "$RUNNER_TEMP/lynxship-sdk-ios-0.1.0.tgz"
+          npx expo install "$RUNNER_TEMP/lynxship-expo-0.1.0.tgz"
+          node <<'NODE'
+          const fs = require("node:fs");
+          const config = JSON.parse(fs.readFileSync("app.json", "utf8"));
+          if (!config.expo.plugins?.some((entry) => entry === "@lynxship/expo")) {
+            throw new Error("npx expo install did not auto-add @lynxship/expo to app.json");
+          }
+          NODE
           npm ls @lynxship/expo @lynxship/sdk-android @lynxship/sdk-ios
           popd
 

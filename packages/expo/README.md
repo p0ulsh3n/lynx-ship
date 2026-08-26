@@ -13,7 +13,14 @@ npx expo prebuild
 npx pod-install
 ```
 
-Add the config plugin to `app.json` or `app.config.ts`:
+When the project uses a static `app.json` or `app.config.json`, the Expo CLI
+automatically adds `@lynxship/expo` to `expo.plugins` during `npx expo install`.
+The plugin's defaults are safe for the first build, so no manual config edit
+is required for the basic integration. `npx expo prebuild` then applies the
+Android and iOS native changes before the native build.
+
+If the project uses a dynamic `app.config.js`/`app.config.ts`, or if custom OTA
+options are needed, add the config plugin manually:
 
 ```json
 {
@@ -37,6 +44,10 @@ Add the config plugin to `app.json` or `app.config.ts`:
   }
 }
 ```
+
+For a dynamic config, keep the same `plugins` entry in the returned Expo
+configuration. Expo cannot safely rewrite JavaScript or TypeScript config
+files automatically.
 
 The endpoint must be HTTPS outside localhost. The public verification key is
 safe to ship in the application; private signing keys must remain in the
