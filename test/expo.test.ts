@@ -80,6 +80,31 @@ test("Expo package contains both native autolink registrations", async () => {
   assert.match(androidBuild, /latest\.release/);
   assert.match(androidBuild, /lynx-trace/);
   assert.doesNotMatch(androidBuild, /3\.8\.0/);
+  const androidView = await readFile(
+    join(
+      root,
+      "android",
+      "src",
+      "main",
+      "java",
+      "com",
+      "lynxship",
+      "expo",
+      "LynxShipExpoView.kt",
+    ),
+    "utf8",
+  );
+  assert.match(
+    androidView,
+    /expo\.modules\.kotlin\.viewevent\.EventDispatcher/,
+  );
+  assert.match(androidView, /activeSequence\(\)/);
+  assert.match(androidView, /as\? Application/);
+  assert.match(androidView, /LynxEnv\.inst\(\)\.init\(application,/);
+  assert.doesNotMatch(
+    androidView,
+    /expo\.modules\.kotlin\.events\.EventDispatcher/,
+  );
   const podspec = await readFile(join(root, "lynxship-expo.podspec"), "utf8");
   assert.match(podspec, /require ['"]json['"]/);
   assert.match(podspec, /s\.version\s*=\s*package_version/);

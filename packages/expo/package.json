@@ -1,6 +1,6 @@
 {
   "name": "@lynxship/expo",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Expo native LynxView with LynxShip OTA delivery and cache support.",
   "license": "MIT",
   "main": "dist/index.js",

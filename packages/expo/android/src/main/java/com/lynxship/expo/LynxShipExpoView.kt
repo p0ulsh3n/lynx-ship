@@ -1,5 +1,6 @@
 package com.lynxship.expo
 
+import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
@@ -19,7 +20,7 @@ import com.lynx.tasm.provider.AbsTemplateProvider
 import com.lynx.tasm.service.LynxServiceCenter
 import com.lynxship.sdk.android.LynxShipOtaClient
 import expo.modules.kotlin.AppContext
-import expo.modules.kotlin.events.EventDispatcher
+import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -62,7 +63,7 @@ class LynxShipExpoView(context: Context, appContext: AppContext) : ExpoView(cont
                 } catch (error: IOException) {
                     onError(mapOf("message" to (error.message ?: "Could not record Lynx launch"), "recoverable" to true))
                 }
-                onReady(mapOf("bundle" to bundleName, "sequence" to (otaClient?.activeSequence ?: 0)))
+                onReady(mapOf("bundle" to bundleName, "sequence" to (otaClient?.activeSequence() ?: 0)))
             }
         })
         addView(lynxView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -98,7 +99,7 @@ class LynxShipExpoView(context: Context, appContext: AppContext) : ExpoView(cont
                 try {
                     otaClient.activateCandidate()
                     post {
-                        onUpdate(mapOf("sequence" to otaClient.activeSequence))
+                        onUpdate(mapOf("sequence" to otaClient.activeSequence()))
                         if (reloadOnUpdate) render()
                     }
                 } catch (error: Exception) {
@@ -168,6 +169,8 @@ class LynxShipExpoView(context: Context, appContext: AppContext) : ExpoView(cont
         synchronized(LynxShipExpoView::class.java) {
             if (!initialized) {
                 val applicationContext = context.applicationContext
+                val application = applicationContext as? Application
+                    ?: throw IllegalStateException("LynxShip requires an Android Application context")
                 // Lynx's official Android integration requires these services
                 // before a LynxView is created. Expo does not give this package
                 // an application subclass, so initialize them once at the
@@ -184,7 +187,7 @@ class LynxShipExpoView(context: Context, appContext: AppContext) : ExpoView(cont
                 LynxServiceCenter.inst().registerService(LynxImageService.getInstance())
                 LynxServiceCenter.inst().registerService(LynxLogService)
                 LynxServiceCenter.inst().registerService(LynxHttpService)
-                LynxEnv.inst().init(applicationContext, null, null, null)
+                LynxEnv.inst().init(application, null, null, null)
                 initialized = true
             }
         }
