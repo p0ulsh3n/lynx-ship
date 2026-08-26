@@ -1,4 +1,4 @@
-import { createElement, type ComponentType } from "react";
+import { createElement, type ComponentType, type ReactNode } from "react";
 import { requireNativeViewManager } from "expo-modules-core";
 import type { ViewProps } from "react-native";
 import {
@@ -25,7 +25,7 @@ const NativeLynxView = requireNativeViewManager<LynxViewProps>("LynxShip");
  * A LynxView that can be placed anywhere in an Expo/React Native view tree.
  * Native OTA configuration is supplied by the LynxShip config plugin.
  */
-export function LynxView(props: LynxViewProps): unknown {
+export function LynxView(props: LynxViewProps): ReactNode {
   return createElement(NativeLynxView, {
     bundle: props.bundle ?? "main.lynx.bundle",
     initialData: props.initialData ?? "",
