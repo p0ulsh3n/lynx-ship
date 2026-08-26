@@ -63,6 +63,7 @@ test("Expo package contains both native autolink registrations", async () => {
     join(root, "android", "build.gradle"),
     "utf8",
   );
+  assert.match(androidBuild, /id\s+["']expo-module-gradle-plugin["']/);
   assert.match(androidBuild, /latest\.release/);
   assert.match(androidBuild, /lynx-trace/);
   assert.doesNotMatch(androidBuild, /3\.8\.0/);
