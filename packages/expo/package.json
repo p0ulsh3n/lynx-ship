@@ -1,6 +1,6 @@
 {
   "name": "@lynxship/expo",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "description": "Expo native LynxView with LynxShip OTA delivery and cache support.",
   "license": "MIT",
   "main": "dist/index.js",
@@ -47,9 +47,11 @@
   "peerDependencies": {
     "@expo/config-plugins": ">=9",
     "expo": ">=52",
-    "expo-modules-core": ">=1",
     "react": ">=18",
     "react-native": ">=0.76"
+  },
+  "devDependencies": {
+    "expo-modules-core": "57.0.13"
   },
   "dependencies": {
     "@lynxship/sdk-android": "workspace:*",

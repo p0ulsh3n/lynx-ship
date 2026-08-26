@@ -39,6 +39,14 @@ test("Expo configuration defaults are deterministic and safe", () => {
 });
 
 test("Expo package contains both native autolink registrations", async () => {
+  const packageJson = JSON.parse(
+    await readFile(join(root, "package.json"), "utf8"),
+  ) as {
+    peerDependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  assert.equal(packageJson.peerDependencies?.["expo-modules-core"], undefined);
+  assert.equal(packageJson.devDependencies?.["expo-modules-core"], "57.0.13");
   const moduleConfig = JSON.parse(
     await readFile(join(root, "expo-module.config.json"), "utf8"),
   ) as {
@@ -63,10 +71,18 @@ test("Expo package contains both native autolink registrations", async () => {
     join(root, "android", "build.gradle"),
     "utf8",
   );
+  assert.match(androidBuild, /group\s*=\s*["']com\.lynxship\.expo["']/);
+  assert.match(androidBuild, /version\s*=\s*moduleVersion/);
+  assert.match(androidBuild, /versionCode\s+1/);
+  assert.match(androidBuild, /versionName\s+moduleVersion/);
+  assert.match(androidBuild, /new JsonSlurper\(\)/);
   assert.match(androidBuild, /id\s+["']expo-module-gradle-plugin["']/);
   assert.match(androidBuild, /latest\.release/);
   assert.match(androidBuild, /lynx-trace/);
   assert.doesNotMatch(androidBuild, /3\.8\.0/);
+  const podspec = await readFile(join(root, "lynxship-expo.podspec"), "utf8");
+  assert.match(podspec, /require ['"]json['"]/);
+  assert.match(podspec, /s\.version\s*=\s*package_version/);
   assert.match(
     await readFile(join(root, "android", "consumer-rules.pro"), "utf8"),
     /CalledByNative/,

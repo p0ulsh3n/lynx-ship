@@ -1,6 +1,14 @@
+require 'json'
+
+package_json_path = File.join(__dir__, 'package.json')
+raise 'LynxShip Expo package.json is missing' unless File.file?(package_json_path)
+
+package_version = JSON.parse(File.read(package_json_path))['version']
+raise 'LynxShip Expo package.json does not define a version' unless package_version
+
 Pod::Spec.new do |s|
   s.name = 'LynxShipExpo'
-  s.version = '0.1.0'
+  s.version = package_version
   s.summary = 'Expo native LynxView integration for LynxShip.'
   s.license = { :type => 'MIT' }
   s.author = { 'LynxShip' => 'opensource@lynxship.dev' }

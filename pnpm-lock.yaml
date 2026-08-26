@@ -283,15 +283,16 @@ importers:
       expo:
         specifier: '>=52'
         version: 57.0.16(@babel/core@7.29.7(supports-color@8.1.1))(@expo/dom-webview@57.0.1)(react-dom@19.2.8(react@19.2.8))(react-native@0.87.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8)(supports-color@8.1.1)(typescript@5.9.2)
-      expo-modules-core:
-        specifier: '>=1'
-        version: 57.0.13(react-native@0.87.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8)
       react:
         specifier: '>=18'
         version: 19.2.8
       react-native:
         specifier: '>=0.76'
         version: 0.87.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1)
+    devDependencies:
+      expo-modules-core:
+        specifier: 57.0.13
+        version: 57.0.13(react-native@0.87.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8)
 
   packages/microhs: {}
 

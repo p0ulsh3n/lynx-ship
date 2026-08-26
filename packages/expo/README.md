@@ -18,6 +18,11 @@ npx expo prebuild
 npx pod-install
 ```
 
+`@lynxship/expo` uses the `expo-modules-core` implementation supplied by the
+installed Expo SDK. The package keeps it as a development dependency for its
+own native-module build, so installing `@lynxship/expo` does not require a
+second manual native dependency in the application.
+
 When the project uses a static `app.json` or `app.config.json`, the Expo CLI
 automatically adds `@lynxship/expo` to `expo.plugins` during `npx expo install`.
 The plugin's defaults are safe for the first build, so no manual config edit
@@ -72,6 +77,10 @@ folder resource so nested asset paths are preserved.
 The endpoint must be HTTPS outside localhost. The public verification key is
 safe to ship in the application; private signing keys must remain in the
 LynxShip CLI or CI secret store.
+
+The Android Expo module reads its native Maven version from this package's
+`package.json`, so publishing a new package version cannot leave the Gradle
+module on an old or missing `versionName`.
 
 `lynxVersion` defaults to `auto`. Android resolves the current Lynx release
 through Gradle and iOS resolves the current CocoaPods release. Gradle and

@@ -1,7 +1,22 @@
+import groovy.json.JsonSlurper
+
 plugins {
     id "com.android.library"
     id "expo-module-gradle-plugin"
 }
+
+def packageJsonFile = file("../package.json")
+if (!packageJsonFile.isFile()) {
+    throw new GradleException("@lynxship/expo package.json is missing")
+}
+def packageJson = new JsonSlurper().parseText(packageJsonFile.text)
+def moduleVersion = packageJson.version?.toString()
+if (!moduleVersion) {
+    throw new GradleException("@lynxship/expo package.json does not define a version")
+}
+
+group = "com.lynxship.expo"
+version = moduleVersion
 
 // `latest.release` is used only when the app does not provide an exact
 // version. Gradle dependency locking then records the resolved version for
@@ -13,6 +28,8 @@ android {
     compileSdk 35
 
     defaultConfig {
+        versionCode 1
+        versionName moduleVersion
         minSdk 24
         consumerProguardFiles "consumer-rules.pro"
     }
