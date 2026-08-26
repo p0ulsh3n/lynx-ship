@@ -1,6 +1,6 @@
 {
   "name": "@lynxship/expo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Expo native LynxView with LynxShip OTA delivery and cache support.",
   "license": "MIT",
   "main": "dist/index.js",
@@ -12,6 +12,7 @@
     "src",
     "app.plugin.js",
     "app.plugin.cjs",
+    "asset-sync.cjs",
     "expo-module.config.json",
     "lynxship-expo.podspec",
     "README.md"

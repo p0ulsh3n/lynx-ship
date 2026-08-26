@@ -123,6 +123,20 @@ jobs:
         run: |
           fixture="$RUNNER_TEMP/lynxship-expo-android"
           pushd "$fixture"
+          mkdir -p lynx-dist
+          cp "$GITHUB_WORKSPACE/examples/lynx-android-demo/dist/main.lynx.bundle" \
+            lynx-dist/main.lynx.bundle
+          node <<'NODE'
+          const fs = require("node:fs");
+          const config = JSON.parse(fs.readFileSync("app.json", "utf8"));
+          config.expo.plugins = [["@lynxship/expo", {
+            bundlePath: "lynx-dist/main.lynx.bundle",
+            embeddedBundle: "main.lynx.bundle",
+            syncBundle: true,
+            lynxVersion: "auto"
+          }]];
+          fs.writeFileSync("app.json", JSON.stringify(config, null, 2) + "\n");
+          NODE
           npx expo config --type prebuild --json > "$RUNNER_TEMP/expo-config.json"
           CONFIG_FILE="$RUNNER_TEMP/expo-config.json" node <<'NODE'
           const fs = require("node:fs");
@@ -135,16 +149,9 @@ jobs:
           test -f android/gradle.properties
           grep -q '^LYNXSHIP_LYNX_VERSION=latest.release$' android/gradle.properties
           grep -q 'lynxship-sdk-android' android/settings.gradle
+          test -s android/app/src/main/assets/main.lynx.bundle
+          test -s android/.lynxship-assets.json
           popd
-
-      - name: Embed a real Lynx bundle in the generated Expo host
-        shell: bash
-        run: |
-          fixture="$RUNNER_TEMP/lynxship-expo-android"
-          mkdir -p "$fixture/android/app/src/main/assets"
-          cp examples/lynx-android-demo/dist/main.lynx.bundle \
-            "$fixture/android/app/src/main/assets/main.lynx.bundle"
-          test -s "$fixture/android/app/src/main/assets/main.lynx.bundle"
 
       - name: Compile the Expo Android debug APK
         shell: bash

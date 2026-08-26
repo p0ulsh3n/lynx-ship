@@ -18,10 +18,11 @@ npx expo run:ios
 ```
 
 Copy [`app.json`](./app.json) and [`App.tsx`](./App.tsx) into that project and
-replace the example values. The Lynx bundle named by `embeddedBundle` must be
-embedded in the native app's Android assets and iOS resource bundle. The
-public key may be shipped in the app; OTA signing credentials must remain in
-LynxShip or CI secrets.
+replace the example values. Build the Lynx project so the file at
+`bundlePath` exists before running `npx expo prebuild`; `@lynxship/expo` then
+copies the bundle and its adjacent Rspeedy assets into the generated Android
+and iOS native projects. The public key may be shipped in the app; OTA signing
+credentials must remain in LynxShip or CI secrets.
 
 `onReady` is emitted by the native view after the bundle provider has supplied
 the bundle. Android additionally tracks Lynx's official first-screen callback

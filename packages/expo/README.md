@@ -7,7 +7,12 @@ embedded `main.lynx.bundle` fallback.
 
 ## Install
 
+Build the Lynx output before the native prebuild. The plugin then copies the
+whole Rspeedy output directory, including `static/` assets, into the generated
+Android and iOS hosts and records hashes in a managed manifest.
+
 ```bash
+lynxship build --local
 npx expo install @lynxship/expo
 npx expo prebuild
 npx pod-install
@@ -37,6 +42,8 @@ options are needed, add the config plugin manually:
             "release-key-1": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
           },
           "embeddedBundle": "main.lynx.bundle",
+          "bundlePath": "../lynx-app/dist/main.lynx.bundle",
+          "syncBundle": true,
           "lynxVersion": "auto"
         }
       ]
@@ -48,6 +55,19 @@ options are needed, add the config plugin manually:
 For a dynamic config, keep the same `plugins` entry in the returned Expo
 configuration. Expo cannot safely rewrite JavaScript or TypeScript config
 files automatically.
+
+`bundlePath` points to the generated `.lynx.bundle` and is resolved relative
+to the Expo project. All files beside that bundle are copied so Rspeedy's
+`static/` resources remain available at runtime. The default is
+`dist/main.lynx.bundle`. `syncBundle` defaults to `true`; set it to `false`
+only when a different native asset pipeline owns the bundle. Prebuild fails
+with a repair command if the configured bundle is missing, rather than
+producing a native app that opens to a blank Lynx view.
+
+The sync is deterministic and idempotent. LynxShip updates files previously
+owned by its manifest, removes only stale files from that manifest, and refuses
+to overwrite a developer-owned native asset. The iOS output is added as a
+folder resource so nested asset paths are preserved.
 
 The endpoint must be HTTPS outside localhost. The public verification key is
 safe to ship in the application; private signing keys must remain in the
@@ -88,7 +108,7 @@ modules and Lynx runtime changes still require a new binary.
 
 ## Build workflow
 
-From the Expo project:
+From the Lynx project, after the bundle has been generated:
 
 ```bash
 lynxship init
@@ -99,6 +119,20 @@ lynxship build --platform ios --profile production
 lynxship ota doctor --platform android
 lynxship ota doctor --platform ios
 ```
+
+For a separate Lynx and Expo checkout, keep the bundle path in the Expo plugin
+configuration and run the two build stages in this order:
+
+```bash
+lynxship --project-dir ../lynx-app build --local
+npx expo prebuild --clean
+npx eas-cli@latest build --platform android --profile preview
+```
+
+EAS receives the Expo project directory, so the Lynx bundle must be generated
+and embedded before the cloud upload (or by an explicitly configured CI build
+step). Config plugins do not run arbitrary network downloads or compilers
+during `prebuild`.
 
 The package does not silently replace an existing native host. `expo prebuild`
 and the official Lynx dependencies remain the source of truth for native

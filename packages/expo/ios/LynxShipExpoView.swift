@@ -113,7 +113,10 @@ public final class LynxShipExpoView: ExpoView {
     guard !path.isEmpty, !path.hasPrefix("/"), !path.contains(".."), !path.contains("\\") else {
       throw NSError(domain: "LynxShip", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unsafe Lynx asset path"])
     }
-    guard let url = Bundle.main.url(forResource: path, withExtension: nil) ?? Bundle.main.url(forResource: path, withExtension: "bundle") else {
+    guard let url = Bundle.main.url(forResource: path, withExtension: nil, subdirectory: "LynxShipAssets")
+      ?? Bundle.main.url(forResource: path, withExtension: "bundle", subdirectory: "LynxShipAssets")
+      ?? Bundle.main.url(forResource: path, withExtension: nil)
+      ?? Bundle.main.url(forResource: path, withExtension: "bundle") else {
       throw NSError(domain: "LynxShip", code: 3, userInfo: [NSLocalizedDescriptionKey: "Embedded Lynx bundle not found: \(path)"])
     }
     return try Data(contentsOf: url)

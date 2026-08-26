@@ -261,8 +261,11 @@ manifest and security boundaries are in
 
 For Expo/React Native brownfield applications, install `@lynxship/expo` to
 embed the official Android/iOS `LynxView` and connect its template provider to
-the signed LynxShip OTA clients. See [`docs/expo-integration.md`](docs/expo-integration.md)
-for the complete configuration and verification workflow.
+the signed LynxShip OTA clients. Build the Lynx bundle first; during
+`npx expo prebuild`, the plugin automatically copies the bundle and its
+Rspeedy assets into the generated native host. See
+[`docs/expo-integration.md`](docs/expo-integration.md) for the complete
+configuration and verification workflow.
 
 The plugin API does not pretend to be a hosted EAS replacement by itself:
 cloud workers, credentials, store providers and a template registry remain

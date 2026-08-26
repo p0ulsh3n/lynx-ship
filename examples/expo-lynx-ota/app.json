@@ -15,7 +15,9 @@
           "publicKeys": {
             "release-key-1": "-----BEGIN PUBLIC KEY-----\\nREPLACE_WITH_PUBLIC_KEY\\n-----END PUBLIC KEY-----"
           },
+          "bundlePath": "dist/main.lynx.bundle",
           "embeddedBundle": "main.lynx.bundle",
+          "syncBundle": true,
           "lynxVersion": "auto"
         }
       ]

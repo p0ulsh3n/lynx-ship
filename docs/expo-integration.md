@@ -53,6 +53,8 @@ Android/iOS binary. OTA is limited to compatible Lynx JavaScript/assets.
             "release-key-1": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
           },
           "embeddedBundle": "main.lynx.bundle",
+          "bundlePath": "../lynx-app/dist/main.lynx.bundle",
+          "syncBundle": true,
           "lynxVersion": "auto"
         }
       ]
@@ -67,13 +69,25 @@ lockfiles record the concrete versions selected, so repeated builds do not
 silently drift. An exact semver can still be supplied for a controlled release
 lane. Before refreshing a lockfile, check the current Lynx integration page,
 the Android artifacts, CocoaPods specifications and the project's compatibility
-tests. Expo config plugins must remain synchronous and should not perform a
-network download during prebuild.
+tests. The plugin performs only a local filesystem sync in its dangerous-mod
+hooks; it never downloads a compiler, resolves a remote artifact, or runs a
+Lynx build during prebuild.
+
+`bundlePath` identifies the generated `.lynx.bundle` relative to the Expo
+project. During `expo prebuild`, the plugin copies the complete Rspeedy output
+directory beside that bundle, including nested `static/` assets, into the
+native host. The default is `dist/main.lynx.bundle`; `syncBundle` defaults to
+`true`. A missing bundle fails prebuild with an actionable message instead of
+creating a native app that cannot render its Lynx screen. Managed manifests
+make repeated prebuilds idempotent, remove only stale managed files, and
+protect developer-owned files from accidental overwrite.
 
 ## Build and release lifecycle
 
 ```text
 Rspeedy bundle
+      ↓
+Expo config plugin sync
       ↓
 LynxShip build / update
       ↓

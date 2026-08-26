@@ -1,10 +1,15 @@
 const {
   withAndroidManifest,
+  withDangerousMod,
   withGradleProperties,
   withInfoPlist,
   withPodfile,
   withSettingsGradle,
+  withXcodeProject,
+  IOSConfig,
 } = require("@expo/config-plugins");
+const path = require("node:path");
+const { syncLynxAssets } = require("./asset-sync.cjs");
 
 const MARKER = "# @lynxship/expo managed";
 const DEFAULT_LYNX_VERSION = "auto";
@@ -56,6 +61,33 @@ function assertOptions(options) {
   ) {
     throw new Error(
       "@lynxship/expo lynxVersion must be auto, latest, or an exact semver",
+    );
+  }
+  if (
+    options.bundlePath !== undefined &&
+    (typeof options.bundlePath !== "string" ||
+      options.bundlePath.trim() === "" ||
+      options.bundlePath.includes("\0"))
+  ) {
+    throw new Error(
+      "@lynxship/expo bundlePath must be a non-empty path without null bytes",
+    );
+  }
+  if (
+    options.syncBundle !== undefined &&
+    typeof options.syncBundle !== "boolean"
+  )
+    throw new Error("@lynxship/expo syncBundle must be a boolean");
+  if (
+    options.embeddedBundle !== undefined &&
+    (typeof options.embeddedBundle !== "string" ||
+      options.embeddedBundle.trim() === "" ||
+      options.embeddedBundle.startsWith("/") ||
+      options.embeddedBundle.includes("\\") ||
+      options.embeddedBundle.split("/").includes(".."))
+  ) {
+    throw new Error(
+      "@lynxship/expo embeddedBundle must be a portable relative path without '..'",
     );
   }
   return options;
@@ -185,20 +217,84 @@ function withLynxShipPodfile(config, options) {
   });
 }
 
+function withLynxShipAndroidAssets(config, options) {
+  if (options.syncBundle === false) return config;
+  return withDangerousMod(config, [
+    "android",
+    async (value) => {
+      await syncLynxAssets(value.modRequest.projectRoot, {
+        ...options,
+        platform: "android",
+      });
+      return value;
+    },
+  ]);
+}
+
+function addIosFolderResource(project, folderPath, groupName) {
+  const group = project.pbxGroupByName(groupName);
+  if (!group)
+    throw new Error(`@lynxship/expo could not find iOS group ${groupName}`);
+  const groups = project.hash.project.objects.PBXGroup || {};
+  const groupKey = Object.keys(groups).find(
+    (key) => !key.endsWith("_comment") && groups[key] === group,
+  );
+  if (!groupKey)
+    throw new Error(`@lynxship/expo could not resolve iOS group ${groupName}`);
+  const existing = group.children?.find(
+    (child) => child.comment === path.basename(folderPath),
+  );
+  if (existing) return;
+  const file = project.addFile(folderPath, groupKey, {
+    lastKnownFileType: "folder",
+    sourceTree: "<group>",
+  });
+  if (!file) return;
+  file.uuid = project.generateUuid();
+  const target = project.getTarget("com.apple.product-type.application");
+  if (!target)
+    throw new Error("@lynxship/expo could not find the iOS application target");
+  file.target = target.uuid;
+  project.addToPbxBuildFileSection(file);
+  project.addToPbxResourcesBuildPhase(file);
+}
+
+function withLynxShipIosAssets(config, options) {
+  if (options.syncBundle === false) return config;
+  const withCopiedAssets = withDangerousMod(config, [
+    "ios",
+    async (value) => {
+      const sourceRoot = IOSConfig.Paths.getSourceRoot(
+        value.modRequest.projectRoot,
+      );
+      await syncLynxAssets(value.modRequest.projectRoot, {
+        ...options,
+        platform: "ios",
+        iosSourceRoot: sourceRoot,
+      });
+      return value;
+    },
+  ]);
+  return withXcodeProject(withCopiedAssets, (value) => {
+    const sourceRoot = IOSConfig.Paths.getSourceRoot(
+      value.modRequest.projectRoot,
+    );
+    const projectName = path.basename(sourceRoot);
+    const folderPath = `${projectName}/LynxShipAssets`;
+    addIosFolderResource(value.modResults, folderPath, projectName);
+    return value;
+  });
+}
+
 function withLynxShipExpo(config, props = {}) {
   const options = assertOptions({ ...getOptions(config), ...props });
-  return withLynxShipPodfile(
-    withLynxShipAndroidSdk(
-      withLynxShipGradle(
-        withLynxShipInfoPlist(
-          withLynxShipAndroidManifest(config, options),
-          options,
-        ),
-        options,
-      ),
-    ),
-    options,
-  );
+  let result = withLynxShipAndroidManifest(config, options);
+  result = withLynxShipInfoPlist(result, options);
+  result = withLynxShipGradle(result, options);
+  result = withLynxShipAndroidSdk(result);
+  result = withLynxShipAndroidAssets(result, options);
+  result = withLynxShipIosAssets(result, options);
+  return withLynxShipPodfile(result, options);
 }
 
 module.exports = withLynxShipExpo;
