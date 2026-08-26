@@ -97,3 +97,15 @@ configured build.<profile>.miso.attribute and build.<profile>.miso.artifact
 values. Miso's native backend remains
 experimental, and the dual-thread restrictions must be validated separately
 from the bundle build.
+
+### Miso MicroHs (experimental)
+
+LynxShip exposes MicroHs only through an explicit adapter contract. A project
+must provide a pinned local binary or HTTPS manifest and an adapter command
+under `build.<profile>.miso.microhs.adapter`. The adapter receives
+`LYNXSHIP_MICROHS_BINARY`, `LYNXSHIP_MICROHS_VERSION` and
+`LYNXSHIP_MISO_OUTPUT`, and must produce the output bundle itself. The
+repository contains contract tests for acquisition, cache reuse, digest and
+signature verification; these do not claim that MicroHs currently compiles
+the full upstream Miso package. Keep the official GHCJS/Nix path as the
+fallback until that compatibility work is validated upstream.

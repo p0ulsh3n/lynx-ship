@@ -25,4 +25,11 @@ Stop new scheduling, preserve queued records, recover expired leases after the w
 
 Revoke the credential, rotate the dependent secret, inspect audit/delivery logs, and rebuild affected artifacts. Never print the old value in a ticket or diagnostic output.
 
-The local JSON state is for development. The Docker profile uses PostgreSQL for control-plane state, Redis with append-only persistence for queued build IDs, and Cloudflare R2 for signed artifacts. Configure R2 through `lynxship storage configure`; the CLI verifies the bucket, uploads artifacts directly, and emits time-limited download URLs. Verify `/ready` before accepting traffic, then exercise a create/restart/read smoke test after every image or schema change. A production operator must still document database/object-store backup, restore, encryption-key recovery and upgrade/rollback procedures before declaring the deployment Stable.
+The local JSON state is for development. The production Docker overlay uses PostgreSQL for control-plane state, Redis with append-only persistence for queued build IDs, and Cloudflare R2 for signed artifacts. Configure R2 through `lynxship storage configure`; the CLI verifies the bucket, uploads artifacts directly, and emits time-limited download URLs. Render `compose.production.yaml` with `.env.production`, verify `/ready` before accepting traffic, then exercise a create/restart/read smoke test after every image or schema change. A production operator must still document database/object-store backup, restore, encryption-key recovery, TLS termination, token rotation and upgrade/rollback procedures before declaring the deployment Stable.
+
+API tokens are persisted in the durable control-plane state and may be created
+or revoked through `/v1/tokens`. The token value is returned only by the create
+response; subsequent list responses contain metadata without the secret. Use
+organization- and project-scoped tokens for automation, reserve the
+environment bootstrap token for initial administration, and rotate it after
+creating scoped tokens.

@@ -78,6 +78,10 @@ export class PostgresStateRepository<T> implements StateRepository<T> {
     return value;
   }
 
+  async probe(): Promise<void> {
+    await this.pool.query("SELECT 1");
+  }
+
   async close(): Promise<void> {
     await this.pool.end();
   }

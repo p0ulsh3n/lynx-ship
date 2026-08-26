@@ -47,6 +47,39 @@
       "additionalProperties": {
         "type": "object",
         "properties": {
+          "miso": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "compiler": { "enum": ["ghcjs", "microhs"] },
+              "attribute": { "type": "string", "minLength": 1 },
+              "artifact": { "type": "string", "minLength": 1 },
+              "microhs": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "version": { "type": "string", "minLength": 1 },
+                  "binary": { "type": "string", "minLength": 1 },
+                  "manifest": { "type": "string", "minLength": 1 },
+                  "manifestUrl": { "type": "string", "format": "uri" },
+                  "cacheDir": { "type": "string", "minLength": 1 },
+                  "publicKey": { "type": "string", "minLength": 1 },
+                  "adapter": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["command"],
+                    "properties": {
+                      "command": { "type": "string", "minLength": 1 },
+                      "args": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "ios": {
             "type": "object",
             "properties": {

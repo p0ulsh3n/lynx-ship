@@ -143,6 +143,15 @@ examples/lynx-octane-fixture and examples/miso-lynx-fixture. LynxShip never
 claims an experimental Octane or Miso build is production-ready solely because
 the bundle compiled.
 
+MicroHs is available only as an explicit experimental adapter contract. It
+does not replace GHCJS automatically and LynxShip does not publish an
+unverified compiler download. To use it, provide a local MicroHs binary or a
+project-owned HTTPS manifest pinned by SHA-256 (and preferably Ed25519), plus
+an adapter command under `build.<profile>.miso.microhs.adapter` that produces
+`result/main.lynx.bundle` (or the configured artifact). If the adapter has not
+been validated against the current Miso sources, keep `compiler` unset and
+use the official GHCJS/Nix flow.
+
 To intentionally upgrade an existing project's Lynx/Rspeedy dependencies,
 follow the official upgrader workflow:
 
@@ -249,6 +258,11 @@ changes are applied automatically by `lynxship build` after host initialization
 and before the Autolink/runtime checks. The complete public contract, package
 manifest and security boundaries are in
 [`docs/plugin-ecosystem.md`](docs/plugin-ecosystem.md).
+
+For Expo/React Native brownfield applications, install `@lynxship/expo` to
+embed the official Android/iOS `LynxView` and connect its template provider to
+the signed LynxShip OTA clients. See [`docs/expo-integration.md`](docs/expo-integration.md)
+for the complete configuration and verification workflow.
 
 The plugin API does not pretend to be a hosted EAS replacement by itself:
 cloud workers, credentials, store providers and a template registry remain

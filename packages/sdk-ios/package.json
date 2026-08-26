@@ -1,8 +1,22 @@
 {
   "name": "@lynxship/sdk-ios",
   "version": "0.1.0",
-  "private": true,
-  "privateStatus": "Beta source",
+  "description": "Native iOS OTA client for LynxShip hosts.",
+  "license": "MIT",
+  "files": [
+    "Sources",
+    "Package.swift",
+    "lynxship-ota.podspec",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/sdk-ios"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "typecheck": "node -e \"require('node:fs').accessSync('Sources/LynxShipOtaClient.swift')\""
   }

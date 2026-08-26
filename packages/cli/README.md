@@ -90,11 +90,50 @@ pnpm --filter @octanejs/rspeedy-plugin exec rspeedy dev \
   --root examples/gallery --environment lynx
 ```
 
-Miso uses the official Haskell/Nix flake rather than an npm build script.
-Install Nix and the project's Haskell toolchain, then let LynxShip use the
-flake's `default`/`bundle` output or configure a project-specific output in
-`lynxship.json`. Miso remains experimental; a successful bundle does not
-prove a signed Android or iOS production build.
+Miso uses the official Haskell/Nix flake rather than an npm build script by
+default. Install Nix and the project's Haskell toolchain, then let LynxShip
+use the flake's `default`/`bundle` output or configure a project-specific
+output in `lynxship.json`. Miso remains experimental; a successful bundle
+does not prove a signed Android or iOS production build.
+
+MicroHs is an explicit, experimental toolchain path. It is not silently
+selected and it is not a drop-in GHCJS replacement: the project must provide
+a real adapter command that understands the Miso/MicroHs compatibility layer
+and writes the configured Lynx bundle. The acquisition layer accepts either a
+local binary or a project-owned HTTPS manifest with a SHA-256 digest and,
+optionally, an Ed25519 signature:
+
+```json
+{
+  "build": {
+    "development": {
+      "miso": {
+        "compiler": "microhs",
+        "artifact": "result/main.lynx.bundle",
+        "microhs": {
+          "version": "0.16.6.0",
+          "manifest": "toolchains/microhs-manifest.json",
+          "publicKey": "-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----",
+          "adapter": {
+            "command": "node",
+            "args": ["tools/miso-microhs-adapter.mjs"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+The manifest must contain an artifact for the current host (`darwin-arm64`,
+`darwin-x64`, `linux-arm64`, `linux-x64` or `win32-x64`). LynxShip downloads
+it to a user cache, verifies the digest before making it executable, and
+never treats the host architecture as the Android/iOS packaging target. A
+local binary can be used for development with
+`build.<profile>.miso.microhs.binary`. The official MicroHs repository does
+not currently publish a verified release fleet, so LynxShip does not invent
+download URLs; teams must own and pin the manifest or keep using the official
+GHCJS/Nix path.
 
 See the source-verified fixture notes in the repository's
 `examples/lynx-octane-fixture` and `examples/miso-lynx-fixture` directories,

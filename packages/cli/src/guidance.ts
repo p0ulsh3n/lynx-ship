@@ -138,6 +138,81 @@ const guidance: Record<string, CliGuidance> = {
     ],
     note: "Check build.production.miso.artifact and the output produced by the Miso flake.",
   },
+  BUILD_MISO_MICROHS_ADAPTER_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform android",
+      "lynxship inspect",
+      "lynxship build --platform android --profile production",
+    ],
+    note: "MicroHs is opt-in and is not a drop-in GHCJS replacement. Configure build.<profile>.miso.microhs with a pinned binary or manifest and a real adapter command, or set build.<profile>.miso.compiler to ghcjs.",
+  },
+  BUILD_MISO_MICROHS_ADAPTER_FAILED: {
+    commands: [
+      "lynxship doctor --platform android --profile production",
+      "lynxship inspect",
+      "lynxship build --platform android --profile production",
+    ],
+    note: "The real adapter or MicroHs compiler rejected the Miso source or failed to write the Lynx bundle. This does not prove Miso/MicroHs compatibility; use the official GHC/Nix workflow until the adapter supports the project's language extensions, packages, FFI and bundle output.",
+  },
+  BUILD_MISO_ARTIFACT_OUTSIDE_PROJECT: {
+    commands: ["lynxship inspect", "lynxship doctor --platform android"],
+    note: "Set build.<profile>.miso.artifact to a file inside the project, such as result/main.lynx.bundle.",
+  },
+  BUILD_MISO_BUNDLE_INVALID: {
+    commands: [
+      "lynxship inspect",
+      "lynxship build --platform android --profile production",
+    ],
+    note: "The configured Miso artifact must be a non-empty file produced by the adapter.",
+  },
+  MICROHS_MANIFEST_REQUIRED: {
+    commands: [
+      "lynxship doctor --platform android",
+      "lynxship inspect",
+      "lynxship build --platform android --profile production",
+    ],
+    note: "Provide build.<profile>.miso.microhs.binary for an existing verified mhs binary, or provide a pinned manifest/manifestUrl. LynxShip never downloads an unpinned compiler.",
+  },
+  MICROHS_HOST_UNSUPPORTED: {
+    commands: ["lynxship doctor --platform android", "lynxship inspect"],
+    note: "Use a verified MicroHs host binary for darwin-arm64, darwin-x64, linux-arm64, linux-x64 or win32-x64, or select the official ghcjs workflow.",
+  },
+  MICROHS_ARTIFACT_UNAVAILABLE: {
+    commands: ["lynxship doctor --platform android", "lynxship inspect"],
+    note: "Publish or select a manifest artifact for the current host architecture. The compiler host architecture is independent from the Android/iOS packaging target.",
+  },
+  MICROHS_BINARY_MISSING: {
+    commands: ["lynxship doctor --platform android", "lynxship inspect"],
+    note: "The configured MicroHs binary does not exist. Fix build.<profile>.miso.microhs.binary or use a pinned manifest.",
+  },
+  MICROHS_VERSION_MISMATCH: {
+    commands: ["lynxship inspect", "lynxship doctor --platform android"],
+    note: "The requested MicroHs version does not match the pinned manifest. Keep compiler and adapter versions aligned.",
+  },
+  MICROHS_MANIFEST_INVALID: {
+    commands: ["lynxship inspect", "lynxship doctor --platform android"],
+    note: "The MicroHs manifest is invalid. It must declare schemaVersion 1, a source commit and SHA-256-pinned artifacts.",
+  },
+  MICROHS_MANIFEST_READ_FAILED: {
+    commands: ["lynxship inspect", "lynxship doctor --platform android"],
+    note: "Check the configured local MicroHs manifest path and permissions.",
+  },
+  MICROHS_MANIFEST_FETCH_FAILED: {
+    commands: ["lynxship inspect", "lynxship doctor --platform android"],
+    note: "Check the pinned MicroHs manifest URL and network access. LynxShip does not silently fall back to an unverified download.",
+  },
+  MICROHS_HASH_MISMATCH: {
+    commands: ["lynxship inspect", "lynxship doctor --platform android"],
+    note: "The downloaded compiler did not match its pinned SHA-256. Do not reuse the cache; verify the release manifest and artifact source.",
+  },
+  MICROHS_SIGNATURE_INVALID: {
+    commands: ["lynxship inspect", "lynxship doctor --platform android"],
+    note: "The MicroHs artifact signature did not verify. Check the pinned release public key and manifest; the binary was rejected.",
+  },
+  MICROHS_SIGNATURE_KEY_REQUIRED: {
+    commands: ["lynxship inspect", "lynxship doctor --platform android"],
+    note: "The manifest declares a signed MicroHs artifact. Configure the pinned public key before using it.",
+  },
   WEB_BUNDLE_MISSING: {
     commands: [
       "lynxship doctor --platform web",

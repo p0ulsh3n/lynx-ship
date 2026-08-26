@@ -8,8 +8,21 @@ export interface BuildProfile {
   channel?: string;
   environment?: string;
   miso?: {
+    compiler?: "ghcjs" | "microhs";
     attribute?: string;
     artifact?: string;
+    microhs?: {
+      version?: string;
+      binary?: string;
+      manifest?: string;
+      manifestUrl?: string;
+      cacheDir?: string;
+      publicKey?: string;
+      adapter?: {
+        command: string;
+        args?: string[];
+      };
+    };
   };
   android?: { artifact?: string };
   ios?: {
@@ -143,6 +156,104 @@ export function validateConfig(
         "Each plugin must be a package name or [package name, JSON options]",
       );
     }
+  }
+  if (value.build !== undefined) {
+    assert(
+      typeof value.build === "object" &&
+        value.build !== null &&
+        !Array.isArray(value.build),
+      "CONFIG_BUILD",
+      "build must be an object keyed by profile name",
+    );
+  }
+  for (const [profileName, profile] of Object.entries(value.build ?? {})) {
+    assert(
+      profile !== null &&
+        typeof profile === "object" &&
+        !Array.isArray(profile),
+      "CONFIG_PROFILE",
+      `build.${profileName} must be an object`,
+    );
+    const miso = (profile as BuildProfile).miso;
+    if (!miso) continue;
+    assert(
+      typeof miso === "object" && !Array.isArray(miso),
+      "CONFIG_MISO",
+      `build.${profileName}.miso must be an object`,
+    );
+    assert(
+      miso.compiler === undefined ||
+        miso.compiler === "ghcjs" ||
+        miso.compiler === "microhs",
+      "CONFIG_MISO_COMPILER",
+      `build.${profileName}.miso.compiler must be ghcjs or microhs`,
+    );
+    if (!miso.microhs) continue;
+    const microhs = miso.microhs;
+    assert(
+      typeof microhs === "object" && !Array.isArray(microhs),
+      "CONFIG_MISO_MICROHS",
+      `build.${profileName}.miso.microhs must be an object`,
+    );
+    assert(
+      microhs.adapter === undefined ||
+        (typeof microhs.adapter.command === "string" &&
+          microhs.adapter.command.trim().length > 0 &&
+          (microhs.adapter.args === undefined ||
+            (Array.isArray(microhs.adapter.args) &&
+              microhs.adapter.args.every((arg) => typeof arg === "string")))),
+      "CONFIG_MISO_MICROHS_ADAPTER",
+      `build.${profileName}.miso.microhs.adapter must contain a command and string args`,
+    );
+    assert(
+      microhs.version === undefined || typeof microhs.version === "string",
+      "CONFIG_MISO_MICROHS_VERSION",
+      `build.${profileName}.miso.microhs.version must be a string`,
+    );
+    assert(
+      microhs.binary === undefined || typeof microhs.binary === "string",
+      "CONFIG_MISO_MICROHS_BINARY",
+      `build.${profileName}.miso.microhs.binary must be a file path`,
+    );
+    assert(
+      microhs.manifest === undefined || typeof microhs.manifest === "string",
+      "CONFIG_MISO_MICROHS_MANIFEST",
+      `build.${profileName}.miso.microhs.manifest must be a file path`,
+    );
+    assert(
+      microhs.manifestUrl === undefined ||
+        typeof microhs.manifestUrl === "string",
+      "CONFIG_MISO_MICROHS_MANIFEST",
+      `build.${profileName}.miso.microhs.manifestUrl must be a URL`,
+    );
+    if (microhs.manifestUrl) {
+      let parsedManifestUrl: URL | undefined;
+      try {
+        parsedManifestUrl = new URL(microhs.manifestUrl);
+      } catch {
+        // The assertion below emits the stable configuration error.
+      }
+      assert(
+        parsedManifestUrl?.protocol === "https:",
+        "CONFIG_MISO_MICROHS_MANIFEST",
+        `build.${profileName}.miso.microhs.manifestUrl must be a valid HTTPS URL`,
+      );
+    }
+    assert(
+      microhs.cacheDir === undefined || typeof microhs.cacheDir === "string",
+      "CONFIG_MISO_MICROHS_CACHE",
+      `build.${profileName}.miso.microhs.cacheDir must be a directory path`,
+    );
+    assert(
+      microhs.publicKey === undefined || typeof microhs.publicKey === "string",
+      "CONFIG_MISO_MICROHS_KEY",
+      `build.${profileName}.miso.microhs.publicKey must be a PEM string`,
+    );
+    assert(
+      !(microhs.manifest && microhs.manifestUrl),
+      "CONFIG_MISO_MICROHS_MANIFEST",
+      `build.${profileName}.miso.microhs must use either manifest or manifestUrl, not both`,
+    );
   }
   assert(
     value.runtimeVersion?.policy === undefined ||

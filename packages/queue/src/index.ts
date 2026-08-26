@@ -11,6 +11,16 @@ export interface QueueItem<T> {
   lease: { workerId: string; expiresAt: number } | null;
 }
 
+export interface RedisQueueMessage<T> {
+  id: string;
+  payload: T;
+}
+
+export interface RedisConsumeOptions {
+  count?: number;
+  blockMs?: number;
+}
+
 export class LeaseQueue<T = unknown> {
   readonly jobs: QueueItem<T>[] = [];
 
@@ -103,6 +113,7 @@ export class RedisQueue {
   constructor(
     readonly url: string,
     readonly prefix = "lynxship",
+    readonly group = "workers",
   ) {
     this.client = createClient({ url });
     this.client.on("error", (error) => {
@@ -115,17 +126,166 @@ export class RedisQueue {
     await this.client.ping();
   }
 
-  async enqueue<T>(queue: string, payload: T): Promise<void> {
+  private streamKey(queue: string): string {
+    assert(
+      /^[a-zA-Z0-9._:-]+$/.test(queue),
+      "QUEUE_NAME",
+      "Queue name contains unsupported characters",
+    );
+    return `${this.prefix}:${queue}:stream`;
+  }
+
+  private async ensureGroup(queue: string): Promise<string> {
     assert(this.client.isReady, "QUEUE_NOT_READY", "Redis queue is not ready");
-    await this.client.rPush(`${this.prefix}:${queue}`, JSON.stringify(payload));
+    const key = this.streamKey(queue);
+    try {
+      await this.client.sendCommand([
+        "XGROUP",
+        "CREATE",
+        key,
+        this.group,
+        "0-0",
+        "MKSTREAM",
+      ]);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes("BUSYGROUP"))
+        throw error;
+    }
+    return key;
+  }
+
+  async enqueue<T>(queue: string, payload: T): Promise<string> {
+    const key = this.streamKey(queue);
+    assert(this.client.isReady, "QUEUE_NOT_READY", "Redis queue is not ready");
+    return this.client.sendCommand([
+      "XADD",
+      key,
+      "*",
+      "payload",
+      JSON.stringify(payload),
+    ]);
   }
 
   async size(queue: string): Promise<number> {
     assert(this.client.isReady, "QUEUE_NOT_READY", "Redis queue is not ready");
-    return this.client.lLen(`${this.prefix}:${queue}`);
+    return this.client.xLen(this.streamKey(queue));
+  }
+
+  async consume<T>(
+    queue: string,
+    consumer: string,
+    options: RedisConsumeOptions = {},
+  ): Promise<RedisQueueMessage<T>[]> {
+    const key = await this.ensureGroup(queue);
+    assert(
+      /^[a-zA-Z0-9._:-]+$/.test(consumer),
+      "QUEUE_CONSUMER",
+      "Consumer name contains unsupported characters",
+    );
+    const count = String(options.count ?? 1);
+    const blockMs = String(options.blockMs ?? 5000);
+    const response = (await this.client.sendCommand([
+      "XREADGROUP",
+      "GROUP",
+      this.group,
+      consumer,
+      "COUNT",
+      count,
+      "BLOCK",
+      blockMs,
+      "STREAMS",
+      key,
+      ">",
+    ])) as unknown;
+    return parseStreamMessages<T>(response);
+  }
+
+  async reclaim<T>(
+    queue: string,
+    consumer: string,
+    minIdleMs = 30_000,
+    count = 10,
+  ): Promise<RedisQueueMessage<T>[]> {
+    const key = await this.ensureGroup(queue);
+    assert(
+      Number.isInteger(minIdleMs) && minIdleMs >= 0,
+      "QUEUE_IDLE_TIME",
+      "Minimum idle time must be a non-negative integer",
+    );
+    const response = (await this.client.sendCommand([
+      "XAUTOCLAIM",
+      key,
+      this.group,
+      consumer,
+      String(minIdleMs),
+      "0-0",
+      "COUNT",
+      String(count),
+    ])) as unknown;
+    return parseAutoClaimMessages<T>(response);
+  }
+
+  async ack(queue: string, id: string): Promise<void> {
+    assert(this.client.isReady, "QUEUE_NOT_READY", "Redis queue is not ready");
+    await this.client.sendCommand([
+      "EVAL",
+      "local acked = redis.call('XACK', KEYS[1], ARGV[1], ARGV[2]); if acked == 1 then return redis.call('XDEL', KEYS[1], ARGV[2]); end; return 0",
+      "1",
+      this.streamKey(queue),
+      this.group,
+      id,
+    ]);
+  }
+
+  async pending(queue: string): Promise<number> {
+    assert(this.client.isReady, "QUEUE_NOT_READY", "Redis queue is not ready");
+    const response = (await this.client.sendCommand([
+      "XPENDING",
+      this.streamKey(queue),
+      this.group,
+    ])) as unknown[];
+    return Number(response[0] ?? 0);
+  }
+
+  async probe(): Promise<void> {
+    assert(this.client.isReady, "QUEUE_NOT_READY", "Redis queue is not ready");
+    await this.client.ping();
   }
 
   async close(): Promise<void> {
     if (this.client.isOpen) await this.client.quit();
   }
+}
+
+function parseStreamMessages<T>(value: unknown): RedisQueueMessage<T>[] {
+  if (!Array.isArray(value) || value.length === 0) return [];
+  const stream = value[0];
+  if (!Array.isArray(stream) || !Array.isArray(stream[1])) return [];
+  return parseEntries<T>(stream[1]);
+}
+
+function parseAutoClaimMessages<T>(value: unknown): RedisQueueMessage<T>[] {
+  if (!Array.isArray(value) || value.length < 2) return [];
+  return parseEntries<T>(value[1]);
+}
+
+function parseEntries<T>(value: unknown[]): RedisQueueMessage<T>[] {
+  const messages: RedisQueueMessage<T>[] = [];
+  for (const entry of value) {
+    if (!Array.isArray(entry) || entry.length < 2) continue;
+    const id = String(entry[0]);
+    const fields = entry[1];
+    if (!Array.isArray(fields)) continue;
+    const payloadIndex = fields.findIndex(
+      (field) => String(field) === "payload",
+    );
+    const payloadValue = fields[payloadIndex + 1];
+    if (payloadIndex < 0 || typeof payloadValue !== "string") continue;
+    try {
+      messages.push({ id, payload: JSON.parse(payloadValue) as T });
+    } catch {
+      throw new Error(`Invalid JSON payload in Redis queue message ${id}`);
+    }
+  }
+  return messages;
 }

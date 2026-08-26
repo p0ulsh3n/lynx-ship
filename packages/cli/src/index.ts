@@ -30,8 +30,10 @@ import {
   loadConfig,
   platformValue,
   resolveProfile,
+  type BuildProfile,
   type LynxShipConfig,
 } from "./config.js";
+import { microHsHostTriple } from "@lynxship/microhs";
 import {
   hasAndroidHost,
   isSupportedAndroidPlatform,
@@ -613,7 +615,7 @@ async function executeBuild(
 }
 
 async function buildSharedLynxBundle(
-  miso: { attribute?: string; artifact?: string } | undefined,
+  miso: BuildProfile["miso"],
 ): Promise<void> {
   const progress = ui.progress("Shared Lynx bundle");
   try {
@@ -778,6 +780,14 @@ Global options:
   --library-dir <path>    Native library directory for autolink codegen
   --simulator             Build/install an iOS .app or install one with simctl
   --help                  Show this complete command reference
+
+Miso compiler profiles:
+  ghcjs (default)        Use the official Miso GHC/Nix workflow
+  microhs                 Use a pinned MicroHs binary and a real adapter command
+
+MicroHs is opt-in. Configure build.<profile>.miso.microhs with either a
+binary path or a pinned manifest, plus an adapter command that writes the
+configured main.lynx.bundle. It is not a drop-in GHCJS replacement.
 
 Node support: Node 22/24 LTS or Node 26 Current. Use Node 24 LTS for production.`;
 }
@@ -1447,7 +1457,14 @@ async function main(): Promise<void> {
       autolink && (doctorPlatform === "android" || doctorPlatform === "ios")
         ? autolink[doctorPlatform]
         : undefined;
-    const lockfile = await findLockfile(root);
+    const framework = await detectLynxFramework(root);
+    const packageLockfile = await findLockfile(root);
+    const lockfile =
+      packageLockfile ??
+      (framework.framework === "miso" &&
+      (await exists(join(root, "flake.lock")))
+        ? join(root, "flake.lock")
+        : null);
     const credentialStore = credentialStorageDescription();
     const nativeCredentialStore = !credentialStore.includes("owner-only");
     const androidHost =
@@ -1498,7 +1515,29 @@ async function main(): Promise<void> {
     const nodeMajor = Number(process.versions.node.split(".")[0]);
     const nodeSupported = nodeMajor >= 22;
     const nodeRecommended = nodeMajor % 2 === 0;
-    const framework = await detectLynxFramework(root);
+    const misoCompiler =
+      framework.framework === "miso"
+        ? (doctorProfile.miso?.compiler ?? "ghcjs")
+        : undefined;
+    const microhsConfig = doctorProfile.miso?.microhs;
+    const microhsBinary =
+      microhsConfig?.binary ?? process.env.LYNXSHIP_MICROHS_BINARY;
+    const microhsBinaryReady = Boolean(
+      microhsBinary && existsSync(resolve(root, microhsBinary)),
+    );
+    const microhsManifestPath =
+      microhsConfig?.manifest ?? process.env.LYNXSHIP_MICROHS_MANIFEST;
+    const microhsManifestReady = Boolean(
+      (microhsManifestPath && existsSync(resolve(root, microhsManifestPath))) ||
+      microhsConfig?.manifestUrl ||
+      process.env.LYNXSHIP_MICROHS_MANIFEST_URL,
+    );
+    let microhsHost: string | undefined;
+    try {
+      microhsHost = microHsHostTriple();
+    } catch {
+      microhsHost = undefined;
+    }
     const pluginReport = await inspectProjectPlugins(root, config);
     const invalidPlugins = pluginReport.plugins.filter(
       (plugin) => plugin.status !== "ready",
@@ -1521,7 +1560,7 @@ async function main(): Promise<void> {
               framework.evidence +
               (framework.experimental ? " · early access" : ""),
       },
-      ...(framework.framework === "miso"
+      ...(framework.framework === "miso" && misoCompiler !== "microhs"
         ? [
             {
               name: "miso-nix",
@@ -1534,7 +1573,47 @@ async function main(): Promise<void> {
                 : "missing · fix: install Nix and rerun doctor",
             },
           ]
-        : []),
+        : framework.framework === "miso"
+          ? [
+              {
+                name: "miso-compiler",
+                ok: true,
+                status: "pass" as const,
+                value: "MicroHs selected explicitly",
+              },
+              {
+                name: "miso-microhs-host",
+                ok: Boolean(microhsHost),
+                status: microhsHost ? ("pass" as const) : ("fail" as const),
+                value:
+                  microhsHost ??
+                  "unsupported host architecture · fix: use a supported MicroHs host or compiler=ghcjs",
+              },
+              {
+                name: "miso-microhs-toolchain",
+                ok: microhsBinaryReady || microhsManifestReady,
+                status:
+                  microhsBinaryReady || microhsManifestReady
+                    ? ("pass" as const)
+                    : ("fail" as const),
+                value: microhsBinaryReady
+                  ? "external MicroHs binary found"
+                  : microhsManifestReady
+                    ? "pinned release manifest configured · downloaded on build"
+                    : "missing · fix: configure build.<profile>.miso.microhs.binary or manifestUrl",
+              },
+              {
+                name: "miso-microhs-adapter",
+                ok: Boolean(microhsConfig?.adapter?.command),
+                status: microhsConfig?.adapter?.command
+                  ? ("pass" as const)
+                  : ("fail" as const),
+                value: microhsConfig?.adapter?.command
+                  ? "adapter command configured"
+                  : "missing · fix: configure build.<profile>.miso.microhs.adapter",
+              },
+            ]
+          : []),
       {
         name: "node",
         ok: nodeSupported,
@@ -1550,7 +1629,7 @@ async function main(): Promise<void> {
             : `${process.version} · recommended: Node 24 LTS`,
       },
       {
-        name: "package-manager-lockfile",
+        name: "dependency-lockfile",
         ok: Boolean(lockfile),
         status: lockfile ? "pass" : "fail",
         value: lockfile ?? "missing · fix: pnpm install (or npm install)",

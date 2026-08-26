@@ -9,6 +9,8 @@ const required = [
   "packages/api/package.json",
   "packages/api/dist/server.js",
   "packages/cli/package.json",
+  "packages/microhs/package.json",
+  "packages/microhs/dist/index.js",
   "packages/plugin-api/package.json",
   "packages/plugin-api/dist/index.js",
   "packages/plugin-api/README.md",

@@ -1,0 +1,9 @@
+{
+  "platforms": ["android", "ios"],
+  "android": {
+    "modules": ["com.lynxship.expo.LynxShipExpoModule"]
+  },
+  "ios": {
+    "modules": ["LynxShipExpoModule"]
+  }
+}

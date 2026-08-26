@@ -1,0 +1,57 @@
+{
+  "name": "@lynxship/expo",
+  "version": "0.1.0",
+  "description": "Expo native LynxView with LynxShip OTA delivery and cache support.",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "android",
+    "ios",
+    "src",
+    "app.plugin.js",
+    "app.plugin.cjs",
+    "expo-module.config.json",
+    "lynxship-expo.podspec",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/expo"
+  },
+  "bugs": {
+    "url": "https://github.com/p0ulsh3n/lynx-ship/issues"
+  },
+  "homepage": "https://github.com/p0ulsh3n/lynx-ship/tree/main/packages/expo#readme",
+  "keywords": [
+    "lynxjs",
+    "lynx",
+    "expo",
+    "react-native",
+    "ota"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false",
+    "prepublishOnly": "pnpm build"
+  },
+  "peerDependencies": {
+    "@expo/config-plugins": ">=9",
+    "expo": ">=52",
+    "expo-modules-core": ">=1",
+    "react": ">=18",
+    "react-native": ">=0.76"
+  },
+  "dependencies": {
+    "@lynxship/sdk-android": "workspace:*",
+    "@lynxship/sdk-ios": "workspace:*"
+  }
+}

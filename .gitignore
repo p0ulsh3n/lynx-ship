@@ -30,3 +30,4 @@ r2.json
 .env
 .env.*
 !.env.example
+!.env.production.example

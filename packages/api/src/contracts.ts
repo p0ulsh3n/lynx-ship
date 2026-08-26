@@ -6,6 +6,7 @@ export interface BuildRequest {
   platform: Platform;
   profile: string;
   sourceHash?: string | null;
+  idempotencyKey?: string | null;
 }
 
 export function validateBuildRequest(value: unknown): BuildRequest {
@@ -37,6 +38,7 @@ export function validateBuildRequest(value: unknown): BuildRequest {
     platform: input.platform,
     profile: input.profile,
     sourceHash: input.sourceHash ?? null,
+    idempotencyKey: input.idempotencyKey ?? null,
   };
 }
 

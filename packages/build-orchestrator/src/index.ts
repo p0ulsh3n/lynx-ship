@@ -45,6 +45,7 @@ export interface CreateBuildInput {
   organizationId: string;
   platform: Platform;
   profile: string;
+  idempotencyKey?: string | null;
   sourceHash?: string | null;
   runtimeVersion?: string;
   runtimeInputs?: Record<string, unknown>;
@@ -62,6 +63,7 @@ export function createBuild(input: CreateBuildInput): BuildJob {
     organizationId: input.organizationId,
     platform: input.platform,
     profile: input.profile,
+    idempotencyKey: input.idempotencyKey ?? null,
     sourceHash: input.sourceHash ?? null,
     runtimeVersion: input.runtimeVersion,
     runtimeInputs: input.runtimeInputs,
@@ -89,6 +91,13 @@ export function transitionBuild(
 
 export interface BuildExecutor {
   execute(job: BuildJob): Promise<BuildJob>;
+}
+
+export interface BuildWorkerReport {
+  state: BuildState;
+  reason?: string;
+  log?: { level: string; message: string };
+  artifact?: BuildJob["artifact"];
 }
 
 export class LocalBuildExecutor implements BuildExecutor {
@@ -129,6 +138,18 @@ export class BuildOrchestrator {
       "Build is already terminal",
     );
     return this.executor.execute(job);
+  }
+
+  report(id: string, report: BuildWorkerReport): BuildJob {
+    const job = this.get(id);
+    transitionBuild(job, report.state, report.reason ?? "worker report");
+    if (report.log)
+      job.logs.push({
+        ...report.log,
+        at: new Date().toISOString(),
+      });
+    if (report.artifact) job.artifact = report.artifact;
+    return job;
   }
 
   cancel(id: string): BuildJob {

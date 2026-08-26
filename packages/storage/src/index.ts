@@ -2,9 +2,9 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import {
-  CreateBucketCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -76,11 +76,7 @@ export class S3ObjectStorage {
   }
 
   async initialize(): Promise<void> {
-    try {
-      await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
-    } catch {
-      await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
-    }
+    await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
   }
 
   async put(
@@ -108,6 +104,25 @@ export class S3ObjectStorage {
       "Storage object body is empty",
     );
     return Buffer.from(await result.Body.transformToByteArray());
+  }
+
+  async head(key: string): Promise<{ size: number; contentType?: string }> {
+    const result = await this.client.send(
+      new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    assert(
+      typeof result.ContentLength === "number",
+      "STORAGE_OBJECT_INVALID",
+      "Storage object metadata is incomplete",
+    );
+    return {
+      size: result.ContentLength,
+      contentType: result.ContentType,
+    };
+  }
+
+  async probe(): Promise<void> {
+    await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
   }
 }
 

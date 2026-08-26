@@ -28,7 +28,8 @@ import {
   verifyAsset,
   Keyring,
 } from "@lynxship/signing";
-import { WorkerRegistry } from "@lynxship/worker-agent";
+import { RedisWorkerRuntime, WorkerRegistry } from "@lynxship/worker-agent";
+import type { RedisQueue } from "@lynxship/queue";
 import {
   SubmissionService,
   GooglePlayProvider,
@@ -355,6 +356,38 @@ test("workers support heartbeat, draining and revocation", () => {
   assert.throws(() => registry.heartbeat(worker.id), {
     code: "WORKER_REVOKED",
   });
+});
+test("workers are marked offline only after their heartbeat lease expires", () => {
+  const registry = new WorkerRegistry();
+  const worker = registry.register({
+    name: "macos-1",
+    organizationId: "o",
+    platform: "ios",
+  });
+  worker.lastHeartbeatAt = new Date(100_000).toISOString();
+  assert.deepEqual(registry.markOffline(189_999, 90_000), []);
+  assert.equal(registry.markOffline(190_000, 90_000)[0]?.status, "offline");
+});
+test("worker runtime acknowledges only after the handler succeeds", async () => {
+  const acknowledgements: string[] = [];
+  let delivered = false;
+  const fakeQueue = {
+    reclaim: async () => [],
+    consume: async () => {
+      if (delivered) return [];
+      delivered = true;
+      return [{ id: "1-0", payload: { buildId: "build-1" } }];
+    },
+    ack: async (_queue: string, id: string) => acknowledgements.push(id),
+  } as unknown as RedisQueue;
+  const runtime = new RedisWorkerRuntime({
+    queue: fakeQueue,
+    queueName: "builds",
+    workerId: "worker-1",
+    blockMs: 0,
+  });
+  await runtime.run(async (_payload) => runtime.stop());
+  assert.deepEqual(acknowledgements, ["1-0"]);
 });
 test("submission requires hashed artifacts and usage is immutable", async () => {
   const submissions = new SubmissionService();

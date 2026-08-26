@@ -9,6 +9,7 @@ const runPnpm = (args: string[]) =>
     ? exec("cmd.exe", ["/d", "/c", "pnpm.cmd", ...args])
     : exec("pnpm", args);
 await runPnpm(["--filter", "@lynxship/api", "build"]);
+await runPnpm(["--filter", "@lynxship/microhs", "build"]);
 await runPnpm(["--filter", "@lynxship/cli", "build"]);
 await cp("packages/api/dist", "dist/packages/api", { recursive: true });
 await cp("packages/cli/dist", "dist/packages/cli", { recursive: true });

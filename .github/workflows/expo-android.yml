@@ -1,0 +1,175 @@
+name: Expo Android integration
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/expo-android.yml"
+      - "packages/expo/**"
+      - "packages/sdk-android/**"
+      - "packages/sdk-ios/**"
+      - "examples/lynx-android-demo/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+  pull_request:
+    paths:
+      - ".github/workflows/expo-android.yml"
+      - "packages/expo/**"
+      - "packages/sdk-android/**"
+      - "packages/sdk-ios/**"
+      - "examples/lynx-android-demo/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: expo-android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Expo latest + LynxShip Android APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node and pnpm
+        uses: pnpm/setup@v2
+        with:
+          version: 11.19.0
+          runtime: node@24
+          install: false
+          cache: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: >-
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
+
+      - name: Show toolchain
+        run: |
+          node --version
+          pnpm --version
+          java -version
+          sdkmanager --version
+
+      - name: Install repository dependencies
+        shell: bash
+        run: |
+          pnpm config set registry https://registry.npmjs.org/
+          pnpm config set network-concurrency 8
+          pnpm config set fetch-retries 5
+          pnpm config set fetch-timeout 120000
+          pnpm install --frozen-lockfile --reporter=append-only
+
+      - name: Build the local Expo and Lynx packages
+        run: |
+          pnpm --filter @lynxship/expo build
+          pnpm --filter @lynxship/lynx-android-demo build
+
+      - name: Pack the local LynxShip packages
+        shell: bash
+        run: |
+          pnpm --filter @lynxship/sdk-android pack --pack-destination "$RUNNER_TEMP"
+          pnpm --filter @lynxship/sdk-ios pack --pack-destination "$RUNNER_TEMP"
+          pnpm --filter @lynxship/expo pack --pack-destination "$RUNNER_TEMP"
+          ls -lh "$RUNNER_TEMP"/lynxship-*.tgz
+
+      - name: Create a fresh Expo project from the latest template
+        shell: bash
+        env:
+          CI: "1"
+        run: |
+          fixture="$RUNNER_TEMP/lynxship-expo-android"
+          npx --yes create-expo-app@latest "$fixture" --template blank-typescript --no-install
+          node - "$fixture" <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const fixture = process.argv[2];
+          const file = path.join(fixture, "app.json");
+          const config = JSON.parse(fs.readFileSync(file, "utf8"));
+          config.expo.plugins = [
+            ["@lynxship/expo", { lynxVersion: "auto" }],
+          ];
+          fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
+          NODE
+          cat "$fixture/app.json"
+
+      - name: Install Expo and the local LynxShip packages
+        shell: bash
+        run: |
+          fixture="$RUNNER_TEMP/lynxship-expo-android"
+          pushd "$fixture"
+          npm install --no-audit --no-fund
+          npm install --no-audit --no-fund \
+            "$RUNNER_TEMP/lynxship-sdk-android-0.1.0.tgz" \
+            "$RUNNER_TEMP/lynxship-sdk-ios-0.1.0.tgz" \
+            "$RUNNER_TEMP/lynxship-expo-0.1.0.tgz"
+          npm ls @lynxship/expo @lynxship/sdk-android @lynxship/sdk-ios
+          popd
+
+      - name: Run Expo config resolution and prebuild
+        shell: bash
+        run: |
+          fixture="$RUNNER_TEMP/lynxship-expo-android"
+          pushd "$fixture"
+          npx expo config --type prebuild --json > "$RUNNER_TEMP/expo-config.json"
+          CONFIG_FILE="$RUNNER_TEMP/expo-config.json" node <<'NODE'
+          const fs = require("node:fs");
+          const config = JSON.parse(fs.readFileSync(process.env.CONFIG_FILE, "utf8"));
+          if (!config.plugins?.some((entry) => Array.isArray(entry) && entry[0] === "@lynxship/expo")) {
+            throw new Error("Expo did not resolve @lynxship/expo in the project config");
+          }
+          NODE
+          npx expo prebuild --platform android --no-install --clean
+          test -f android/gradle.properties
+          grep -q '^LYNXSHIP_LYNX_VERSION=latest.release$' android/gradle.properties
+          grep -q 'lynxship-sdk-android' android/settings.gradle
+          popd
+
+      - name: Embed a real Lynx bundle in the generated Expo host
+        shell: bash
+        run: |
+          fixture="$RUNNER_TEMP/lynxship-expo-android"
+          mkdir -p "$fixture/android/app/src/main/assets"
+          cp examples/lynx-android-demo/dist/main.lynx.bundle \
+            "$fixture/android/app/src/main/assets/main.lynx.bundle"
+          test -s "$fixture/android/app/src/main/assets/main.lynx.bundle"
+
+      - name: Compile the Expo Android debug APK
+        shell: bash
+        run: |
+          fixture="$RUNNER_TEMP/lynxship-expo-android"
+          pushd "$fixture/android"
+          {
+            echo "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+            echo "org.gradle.workers.max=2"
+          } >> gradle.properties
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --max-workers=2 --stacktrace
+          apk="$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)"
+          test -n "$apk"
+          test -s "$apk"
+          popd
+
+      - name: Upload the compiled APK as a test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lynxship-expo-android-debug
+          path: ${{ runner.temp }}/lynxship-expo-android/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 7

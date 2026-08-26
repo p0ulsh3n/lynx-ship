@@ -44,6 +44,20 @@ export interface TokenRecord {
 export class TokenManager {
   readonly tokens = new Map<string, TokenRecord>();
 
+  constructor(records: TokenRecord[] = []) {
+    this.restore(records);
+  }
+
+  restore(records: TokenRecord[]): void {
+    this.tokens.clear();
+    for (const record of records)
+      this.tokens.set(record.id, structuredClone(record));
+  }
+
+  snapshot(): TokenRecord[] {
+    return [...this.tokens.values()].map((record) => structuredClone(record));
+  }
+
   create(input: {
     name: string;
     organizationId: string;
@@ -59,12 +73,32 @@ export class TokenManager {
     const id = createId("tok");
     const secret = randomBytes(24).toString("base64url");
     const value = `lxs_${id}_${secret}`;
+    const scopes = [...new Set(input.scopes ?? ["project:read"])] as string[];
+    assert(
+      scopes.every((scope) =>
+        [
+          "project:read",
+          "project:write",
+          "build:write",
+          "submit:write",
+          "update:write",
+          "credentials:write",
+        ].includes(scope),
+      ),
+      "TOKEN_SCOPE",
+      "Token contains an unsupported scope",
+    );
+    assert(
+      !scopes.includes("*"),
+      "TOKEN_SCOPE",
+      "Wildcard scope is reserved for the server bootstrap token",
+    );
     this.tokens.set(id, {
       id,
       name: input.name,
       organizationId: input.organizationId,
       projectId: input.projectId ?? null,
-      scopes: [...new Set(input.scopes ?? ["project:read"])],
+      scopes,
       hash: digest(value),
       expiresAt: input.expiresAt ?? null,
       revokedAt: null,
@@ -76,7 +110,7 @@ export class TokenManager {
       name: input.name,
       organizationId: input.organizationId,
       projectId: input.projectId ?? null,
-      scopes: [...new Set(input.scopes ?? ["project:read"])],
+      scopes,
       expiresAt: input.expiresAt ?? null,
     };
   }
@@ -123,12 +157,15 @@ export class TokenManager {
       "Service token has expired",
     );
     assert(
-      !input.organizationId || token.organizationId === input.organizationId,
+      token.scopes.includes("*") ||
+        !input.organizationId ||
+        token.organizationId === input.organizationId,
       "AUTH_SCOPE",
       "Token is not authorized for this organization",
     );
     assert(
-      !input.projectId ||
+      token.scopes.includes("*") ||
+        !input.projectId ||
         !token.projectId ||
         token.projectId === input.projectId,
       "AUTH_SCOPE",

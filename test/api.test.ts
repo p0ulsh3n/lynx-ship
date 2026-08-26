@@ -27,6 +27,9 @@ test("Fastify API exposes health and build contract", async (t) => {
   const health = await server.inject({ method: "GET", url: "/health" });
   assert.equal(health.statusCode, 200);
   assert.deepEqual(health.json(), { status: "ok" });
+  const metrics = await server.inject({ method: "GET", url: "/metrics" });
+  assert.equal(metrics.statusCode, 200);
+  assert.match(metrics.body, /lynxship_http_requests_total/);
   const dashboard = await server.inject({ method: "GET", url: "/" });
   assert.equal(dashboard.statusCode, 200);
   assert.match(dashboard.body, /LynxShip/);
@@ -84,6 +87,159 @@ test("Fastify auth enforces scopes while health remains public", async (t) => {
     },
   });
   assert.equal(response.statusCode, 201);
+});
+
+test("production API refuses the local fake build executor", async (t) => {
+  const server = createApi({ allowLocalBuildExecutor: false });
+  t.after(() => server.close());
+  const created = await server.inject({
+    method: "POST",
+    url: "/v1/builds",
+    payload: {
+      projectId: "p",
+      organizationId: "o",
+      platform: "android",
+      profile: "production",
+    },
+  });
+  const job = created.json() as { id: string };
+  const run = await server.inject({
+    method: "POST",
+    url: `/v1/builds/${job.id}/run`,
+  });
+  assert.equal(run.statusCode, 400);
+  assert.equal(
+    (run.json() as { error: string }).error,
+    "BUILD_WORKER_REQUIRED",
+  );
+});
+
+test("build creation is idempotent for CI retries", async (t) => {
+  const manager = new TokenManager();
+  const token = manager.create({
+    name: "ci",
+    organizationId: "org-a",
+    scopes: ["build:write"],
+  });
+  const server = createApi({ tokenManager: manager });
+  t.after(() => server.close());
+  const payload = {
+    projectId: "project-a",
+    organizationId: "org-a",
+    platform: "android",
+    profile: "production",
+    idempotencyKey: "github-run-123",
+  };
+  const headers = { authorization: `Bearer ${token.value}` };
+  const first = await server.inject({
+    method: "POST",
+    url: "/v1/builds",
+    headers,
+    payload,
+  });
+  const second = await server.inject({
+    method: "POST",
+    url: "/v1/builds",
+    headers,
+    payload,
+  });
+  assert.equal(first.statusCode, 201);
+  assert.equal(second.statusCode, 200);
+  assert.equal(
+    (second.json() as { id: string }).id,
+    (first.json() as { id: string }).id,
+  );
+});
+
+test("tenant-scoped tokens cannot create or read another organization's builds", async (t) => {
+  const manager = new TokenManager();
+  const token = manager.create({
+    name: "tenant-ci",
+    organizationId: "org-a",
+    scopes: ["build:write", "project:read"],
+  });
+  const server = createApi({ tokenManager: manager });
+  t.after(() => server.close());
+  const forbiddenCreate = await server.inject({
+    method: "POST",
+    url: "/v1/builds",
+    headers: { authorization: `Bearer ${token.value}` },
+    payload: {
+      projectId: "project-b",
+      organizationId: "org-b",
+      platform: "android",
+      profile: "production",
+    },
+  });
+  assert.equal(forbiddenCreate.statusCode, 403);
+  const allowedCreate = await server.inject({
+    method: "POST",
+    url: "/v1/builds",
+    headers: { authorization: `Bearer ${token.value}` },
+    payload: {
+      projectId: "project-a",
+      organizationId: "org-a",
+      platform: "android",
+      profile: "production",
+    },
+  });
+  assert.equal(allowedCreate.statusCode, 201);
+  const job = allowedCreate.json() as { id: string };
+  const unscopedList = await server.inject({
+    method: "GET",
+    url: "/v1/builds",
+    headers: { authorization: `Bearer ${token.value}` },
+  });
+  assert.equal(unscopedList.statusCode, 403);
+  const scopedList = await server.inject({
+    method: "GET",
+    url: "/v1/builds?organizationId=org-a",
+    headers: { authorization: `Bearer ${token.value}` },
+  });
+  assert.equal(scopedList.statusCode, 200);
+  assert.equal((scopedList.json() as Array<{ id: string }>)[0]?.id, job.id);
+});
+
+test("worker lifecycle is tenant-scoped and persists heartbeat state", async (t) => {
+  const manager = new TokenManager();
+  const token = manager.create({
+    name: "worker-control",
+    organizationId: "org-a",
+    scopes: ["build:write"],
+  });
+  const server = createApi({ tokenManager: manager });
+  t.after(() => server.close());
+  const headers = { authorization: `Bearer ${token.value}` };
+  const created = await server.inject({
+    method: "POST",
+    url: "/v1/workers",
+    headers,
+    payload: {
+      name: "linux-1",
+      organizationId: "org-a",
+      platform: "android",
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const worker = created.json() as { id: string; status: string };
+  const heartbeat = await server.inject({
+    method: "POST",
+    url: `/v1/workers/${worker.id}/heartbeat`,
+    headers,
+  });
+  assert.equal(heartbeat.statusCode, 200);
+  assert.equal((heartbeat.json() as { status: string }).status, "ready");
+  const foreign = await server.inject({
+    method: "POST",
+    url: "/v1/workers",
+    headers,
+    payload: {
+      name: "linux-2",
+      organizationId: "org-b",
+      platform: "android",
+    },
+  });
+  assert.equal(foreign.statusCode, 403);
 });
 
 test("OTA API rolls a channel back to a compatible release", async (t) => {
@@ -152,6 +308,11 @@ test("Fastify rate limiting returns 429 with a retry hint", async (t) => {
 test("persistent API state survives app reload", async () => {
   const root = await mkdtemp(join(tmpdir(), "lynxship-api-"));
   const first = await loadPersistentApp(root);
+  const token = first.app.auth.create({
+    name: "persistent-ci",
+    organizationId: "o",
+    scopes: ["project:read"],
+  });
   const job = await first.app.builds.create({
     projectId: "p",
     organizationId: "o",
@@ -162,6 +323,11 @@ test("persistent API state survives app reload", async () => {
   await first.save();
   const second = await loadPersistentApp(root);
   assert.equal(second.app.builds.get(job.id).state, "success");
+  assert.equal(
+    second.app.auth.authenticate(token.value, { requiredScope: "project:read" })
+      .name,
+    "persistent-ci",
+  );
 });
 
 test("organization and project resources are persisted through the API service", async () => {

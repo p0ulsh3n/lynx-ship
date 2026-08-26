@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { TokenManager, type TokenRecord } from "@lynxship/auth";
 import {
   JsonRepository,
   PostgresStateRepository,
@@ -53,10 +55,16 @@ export interface RuntimeBackends {
   };
   queueStore: RedisQueue | null;
   storageStore: FileStorage | S3ObjectStorage | null;
+  probe: () => Promise<{
+    database: boolean;
+    queue: boolean;
+    storage: boolean;
+  }>;
   close: () => Promise<void>;
 }
 
 export interface LynxShipApp {
+  auth: TokenManager;
   builds: BuildService;
   ota: OtaService;
   submissions: SubmissionService;
@@ -74,8 +82,12 @@ export interface LynxShipApp {
   runtime?: RuntimeBackends;
 }
 
-export function createApp(runtime?: RuntimeBackends): LynxShipApp {
+export function createApp(
+  runtime?: RuntimeBackends,
+  auth = new TokenManager(),
+): LynxShipApp {
   return {
+    auth,
     builds: new BuildService(),
     ota: new OtaService(),
     submissions: new SubmissionService(),
@@ -95,6 +107,7 @@ export function createApp(runtime?: RuntimeBackends): LynxShipApp {
 }
 
 export interface PersistentAppState {
+  tokens: TokenRecord[];
   signingKey: SigningKey | null;
   builds: BuildJob[];
   releases: Release[];
@@ -114,6 +127,7 @@ export interface PersistentAppState {
 }
 
 const emptyState: PersistentAppState = {
+  tokens: [],
   signingKey: null,
   builds: [],
   releases: [],
@@ -132,8 +146,14 @@ const emptyState: PersistentAppState = {
   metrics: {},
 };
 
+export function envValue(name: string): string | undefined {
+  const file = process.env[`${name}_FILE`];
+  if (file) return readFileSync(file, "utf8").trim();
+  return process.env[name];
+}
+
 function requiredEnv(name: string): string {
-  const value = process.env[name];
+  const value = envValue(name);
   assert(
     value,
     "RUNTIME_CONFIG",
@@ -145,7 +165,9 @@ function requiredEnv(name: string): string {
 async function createRuntime(root: string): Promise<RuntimeBackends> {
   const databaseDriver = process.env.LYNXSHIP_DATABASE_DRIVER ?? "json";
   const queueDriver = process.env.LYNXSHIP_QUEUE_DRIVER ?? "memory";
-  const storageDriver = process.env.LYNXSHIP_STORAGE_DRIVER ?? "r2";
+  const storageDriver =
+    process.env.LYNXSHIP_STORAGE_DRIVER ??
+    (process.env.NODE_ENV === "production" ? "r2" : "filesystem");
 
   assert(
     databaseDriver === "json" || databaseDriver === "postgres",
@@ -186,7 +208,17 @@ async function createRuntime(root: string): Promise<RuntimeBackends> {
 
   const storageStore =
     storageDriver === "r2"
-      ? null
+      ? envValue("R2_ENDPOINT") &&
+        envValue("R2_ACCESS_KEY_ID") &&
+        envValue("R2_SECRET_ACCESS_KEY") &&
+        envValue("R2_BUCKET")
+        ? new S3ObjectStorage(
+            envValue("R2_ENDPOINT")!,
+            envValue("R2_ACCESS_KEY_ID")!,
+            envValue("R2_SECRET_ACCESS_KEY")!,
+            envValue("R2_BUCKET")!,
+          )
+        : null
       : storageDriver === "s3"
         ? new S3ObjectStorage(
             requiredEnv("S3_ENDPOINT"),
@@ -195,7 +227,37 @@ async function createRuntime(root: string): Promise<RuntimeBackends> {
             process.env.S3_BUCKET ?? "lynxship",
           )
         : new FileStorage(join(root, ".lynxship", "objects"));
+  assert(
+    process.env.NODE_ENV !== "production" ||
+      (databaseDriver === "postgres" &&
+        queueDriver === "redis" &&
+        storageDriver === "r2" &&
+        storageStore instanceof S3ObjectStorage),
+    "PRODUCTION_CONFIG",
+    "Production requires PostgreSQL, Redis and a configured R2 storage backend",
+  );
   if (storageStore instanceof S3ObjectStorage) await storageStore.initialize();
+
+  const probe = async () => {
+    const checks = await Promise.allSettled([
+      databaseDriver === "postgres"
+        ? (state as PostgresStateRepository<PersistentAppState>).probe()
+        : Promise.resolve(),
+      queueStore?.probe() ?? Promise.resolve(),
+      storageStore instanceof S3ObjectStorage
+        ? storageStore.probe()
+        : Promise.resolve(),
+    ]);
+    return {
+      database: checks[0]?.status === "fulfilled",
+      queue: checks[1]?.status === "fulfilled",
+      storage:
+        storageDriver === "r2"
+          ? checks[2]?.status === "fulfilled" &&
+            storageStore instanceof S3ObjectStorage
+          : checks[2]?.status === "fulfilled",
+    };
+  };
 
   return {
     database: databaseDriver,
@@ -204,6 +266,7 @@ async function createRuntime(root: string): Promise<RuntimeBackends> {
     state,
     queueStore,
     storageStore,
+    probe,
     close: async () => {
       await queueStore?.close();
       if ("close" in state) await state.close?.();
@@ -221,7 +284,7 @@ export async function loadPersistentApp(root: string): Promise<{
   const runtime = await createRuntime(root);
   const state = await runtime.state.read();
   state.signingKey ??= createSigningKey();
-  const app = createApp(runtime);
+  const app = createApp(runtime, new TokenManager(state.tokens ?? []));
 
   for (const job of state.builds ?? []) app.builds.jobs.set(job.id, job);
 
@@ -267,6 +330,7 @@ function snapshotApp(
 ): PersistentAppState {
   return {
     ...state,
+    tokens: app.auth.snapshot(),
     signingKey: app.ota.signingKey,
     builds: app.builds.list(),
     releases: [...app.ota.releases.values()],

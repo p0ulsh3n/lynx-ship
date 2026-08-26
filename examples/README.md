@@ -10,4 +10,6 @@ Framework fixtures:
 - \`lynx-octane-fixture\`: official Octane Lynx integration instructions and
   early-access validation boundary.
 - \`miso-lynx-fixture\`: official Miso/Nix bundle instructions and configuration
-  contract.
+  contract, plus the opt-in MicroHs adapter boundary.
+- \`expo-lynx-ota\`: minimal Expo + \`@lynxship/expo\` brownfield/OTA fixture;
+  native builds must be generated and tested with the current Expo toolchain.

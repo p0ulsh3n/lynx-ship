@@ -25,5 +25,8 @@ The Docker profile sets `LYNXSHIP_DATABASE_DRIVER=postgres`,
 validates the configured Cloudflare R2 bucket, uploads signed artifacts
 directly to R2, and sends only immutable artifact metadata plus a temporary
 download URL to the API. The API persists control-plane state in PostgreSQL
-and queues build IDs in Redis. Cloud execution, worker isolation and
-production backup procedures remain separate acceptance gates.
+and queues build IDs in Redis Streams. Consumer groups provide at-least-once
+delivery; workers acknowledge completed messages atomically and abandoned
+pending messages can be reclaimed after a lease timeout. Cloud execution,
+worker isolation and production backup procedures remain separate acceptance
+gates.

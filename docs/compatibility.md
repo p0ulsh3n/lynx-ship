@@ -21,6 +21,12 @@ files and keeps the native host pipeline shared:
   build.<profile>.miso.attribute for custom outputs. It runs nix build, verifies
   result/main.lynx.bundle (or the configured artifact), and copies it into
   dist/ before the native host build.
+- MicroHs is an opt-in experimental adapter contract. LynxShip can acquire a
+  pinned host binary from a local path or HTTPS manifest, verify SHA-256 and an
+  optional Ed25519 signature, and invoke the project's adapter. The adapter is
+  responsible for actual Miso compatibility and must write the configured
+  bundle. The official MicroHs repository currently has no verified release
+  artifacts, so no public download URL is assumed or fabricated.
 
 The framework detector is advisory for ReactLynx, Vue and Vanilla Lynx, and
 enforces the required Nix/bundle boundary for Miso. A successful bundle build
@@ -71,3 +77,29 @@ an Apple target or submit it through Apple's Transporter. This is an operating
 system boundary, not a simulated success path.
 
 Every release must update this file with the dated official-source review before promoting a capability to Stable.
+
+## Miso/MicroHs source review
+
+Reviewed 2026-08-26 against the current upstream sources: [MicroHs
+repository](https://github.com/augustss/MicroHs), [Miso
+repository](https://github.com/dmjio/miso), [Miso-Lynx
+repository](https://github.com/haskell-miso/miso-lynx), [Miso-Lynx
+gallery](https://github.com/haskell-miso/miso-lynx-gallery) and the [Miso.Native
+API](https://haddocks.haskell-miso.org/miso/Miso-Native.html). MicroHs is a
+small Haskell implementation/compiler with its own supported subset and
+runtime; it must not be described as PrimJS or as a proven GHCJS replacement.
+The current Miso sources still expose GHC/GHCJS-oriented dependencies and
+FFI, while MicroHs upstream does not provide a verified release artifact
+fleet. That is why the implementation is an adapter boundary with a tested
+fallback, not an automatic compiler swap.
+
+The reproducible compatibility smoke test used the current MicroHs checkout
+at commit `45d0cdb9b7edb15a78f236074d7a6a0adc737aea` (version `0.16.6.0`) and
+the current `haskell-miso/miso-lynx-gallery` checkout at commit
+`7ef5e1c38e51a1b77734896ce14ebd7a57624fba`. MicroHs itself compiled on the
+Windows test machine, but `mhs -fno-code Main.hs` rejected the gallery at
+`$(makeLenses ''Drag)` in `Main.hs:81`. The LynxShip MicroHs path therefore
+fails with `BUILD_MISO_MICROHS_ADAPTER_FAILED` and produces no bundle. This is
+an observed upstream compatibility gap, not a missing CLI flag; the official
+GHC/Nix path remains the supported Miso build until Miso has a MicroHs port or
+a compatible adapter.

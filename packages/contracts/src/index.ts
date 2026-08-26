@@ -58,6 +58,7 @@ export interface BuildJob {
   organizationId: string;
   platform: Platform;
   profile: string;
+  idempotencyKey?: string | null;
   sourceHash: string | null;
   runtimeVersion?: string;
   runtimeInputs?: Record<string, unknown>;

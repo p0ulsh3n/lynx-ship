@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "LynxShip Expo OTA Demo",
+    "slug": "lynxship-expo-ota-demo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "plugins": [
+      [
+        "@lynxship/expo",
+        {
+          "endpoint": "https://api.example.com",
+          "projectId": "00000000-0000-4000-8000-000000000000",
+          "channel": "production",
+          "runtimeVersion": "lynx-runtime-2026-01",
+          "publicKeys": {
+            "release-key-1": "-----BEGIN PUBLIC KEY-----\\nREPLACE_WITH_PUBLIC_KEY\\n-----END PUBLIC KEY-----"
+          },
+          "embeddedBundle": "main.lynx.bundle",
+          "lynxVersion": "auto"
+        }
+      ]
+    ]
+  }
+}

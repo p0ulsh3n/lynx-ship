@@ -11,6 +11,7 @@
   "references": [
     { "path": "../build-orchestrator" },
     { "path": "../contracts" },
+    { "path": "../microhs" },
     { "path": "../plugin-api" },
     { "path": "../db" },
     { "path": "../signing" },

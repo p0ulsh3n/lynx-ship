@@ -1,8 +1,22 @@
 {
   "name": "@lynxship/sdk-android",
   "version": "0.1.0",
-  "private": true,
-  "privateStatus": "Beta source",
+  "description": "Native Android OTA client for LynxShip hosts.",
+  "license": "MIT",
+  "files": [
+    "src",
+    "build.gradle",
+    "README.md",
+    "src/main/AndroidManifest.xml"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/sdk-android"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "typecheck": "node -e \"require('node:fs').accessSync('src/main/java/com/lynxship/sdk/android/LynxShipOtaClient.java')\""
   }
