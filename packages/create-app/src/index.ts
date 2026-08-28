@@ -8,7 +8,7 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
-export const CREATE_APP_VERSION = "0.1.3";
+export const CREATE_APP_VERSION = "0.1.4";
 
 export const RSPEEDY_VERSION = "latest";
 
