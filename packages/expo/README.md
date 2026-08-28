@@ -19,9 +19,10 @@ npx pod-install
 ```
 
 `@lynxship/expo` uses the `expo-modules-core` implementation supplied by the
-installed Expo SDK. The package keeps it as a development dependency for its
-own native-module build, so installing `@lynxship/expo` does not require a
-second manual native dependency in the application.
+installed Expo SDK. It is declared as a peer dependency so Expo Doctor can
+validate the application explicitly; `npx expo install @lynxship/expo` should
+select the SDK-compatible version. The workspace keeps a matching development
+dependency for its own native-module build.
 
 When the project uses a static `app.json` or `app.config.json`, the Expo CLI
 automatically adds `@lynxship/expo` to `expo.plugins` during `npx expo install`.
@@ -43,6 +44,12 @@ options are needed, add the config plugin manually:
           "projectId": "00000000-0000-4000-8000-000000000000",
           "channel": "production",
           "runtimeVersion": "lynx-runtime-2026-01",
+          "notifications": {
+            "enabled": true,
+            "enableBackgroundRemoteNotifications": true,
+            "communicationNotifications": true,
+            "android": { "defaultChannel": "default" }
+          },
           "publicKeys": {
             "release-key-1": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
           },
@@ -89,6 +96,32 @@ install, so normal rebuilds remain reproducible. Set an exact semver only when
 you intentionally operate a pinned native compatibility lane; do not put
 `latest` in a production lockfile without reviewing the resulting native
 build.
+
+## Optional push notifications
+
+When an Expo app also uses `@lynxship/notifications/expo`, set
+`notifications.enabled` to `true` in this plugin. LynxShip delegates the
+native permission, FCM/APNs token acquisition and build-time configuration to
+the official `expo-notifications` package, then the JavaScript adapter sends
+the token to the authenticated backend. Install the SDK-selected native
+package first:
+
+```bash
+npx expo install expo-notifications expo-constants
+```
+
+The app must call `LynxShipNotifications.register(...)` with its authenticated
+user/project identity and HTTPS registration endpoint. This is intentionally
+not guessed by the plugin: app identity and backend authorization are
+application data. FCM/APNs credentials also remain in EAS/CI secrets.
+
+For message or presence notifications with profile images, pass an HTTPS
+`imageUrl` from the backend payload. Android can render the image directly
+through FCM. iOS requires a separate Notification Service Extension target;
+use the template published by `@lynxship/notifications` and add it to the Expo
+iOS project before an EAS build. The extension is a separately signed native
+target, so it cannot be created safely by the JavaScript `LynxView` component
+at runtime.
 
 ## Use the view
 

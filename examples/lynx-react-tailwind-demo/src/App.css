@@ -1,0 +1,177 @@
+:root {
+  background-color: #07121f;
+  color: #f8fafc;
+}
+
+page {
+  background-color: #07121f;
+  font-size: 16px;
+}
+
+text {
+  color: #f8fafc;
+  white-space: normal;
+}
+
+.screen {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding-top: 16px;
+  padding-right: 5vw;
+  padding-bottom: 18px;
+  padding-left: 5vw;
+  padding-top: calc(env(safe-area-inset-top) + 16px);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 18px);
+}
+
+.shell {
+  position: relative;
+  align-self: center;
+  width: 100%;
+  max-width: 680px;
+}
+
+.ambient-glow {
+  position: absolute;
+  width: 72vw;
+  height: 72vw;
+  max-width: 520px;
+  max-height: 520px;
+  border-radius: 50%;
+}
+
+.ambient-glow-one {
+  top: -34vw;
+  right: -22vw;
+  background: rgba(109, 93, 252, 0.15);
+}
+
+.ambient-glow-two {
+  bottom: 9vh;
+  left: -42vw;
+  background: rgba(0, 212, 170, 0.12);
+}
+
+.topbar,
+.intro,
+.tabs,
+.notice,
+.messages-section,
+.calls-section,
+.bottom-nav {
+  position: relative;
+}
+
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  box-shadow: 0 8px 24px rgba(22, 224, 176, 0.16);
+}
+
+.brand-name {
+  letter-spacing: 0.02em;
+}
+
+.brand-caption {
+  font-size: 9px;
+}
+
+.icon {
+  font-family: Arial, sans-serif;
+  font-weight: 700;
+}
+
+.page-title {
+  letter-spacing: -0.04em;
+}
+
+.intro-copy {
+  max-width: 420px;
+}
+
+.tabs {
+  box-sizing: border-box;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.tab-active {
+  background: #17304a;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.tab-count {
+  line-height: 1;
+}
+
+.notice {
+  box-sizing: border-box;
+  border: 1px solid rgba(22, 224, 176, 0.13);
+}
+
+.conversation-scroll {
+  width: 100%;
+  height: 44vh;
+  min-height: 270px;
+}
+
+.message-card,
+.call-row {
+  box-sizing: border-box;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.message-card-active {
+  border-color: rgba(22, 224, 176, 0.52);
+  background: #122b41;
+}
+
+.avatar {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.avatar-online {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  border: 2px solid #0e2033;
+}
+
+.conversation-name,
+.conversation-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer,
+.call-hero {
+  box-sizing: border-box;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.16);
+}
+
+.call-hero {
+  background: linear-gradient(135deg, #142d46 0%, #111d3b 100%);
+}
+
+.call-wave {
+  letter-spacing: -0.2em;
+  color: rgba(196, 181, 253, 0.8);
+}
+
+.call-back {
+  min-width: 62px;
+}
+
+.bottom-nav {
+  box-sizing: border-box;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.nav-item {
+  min-width: 48px;
+}

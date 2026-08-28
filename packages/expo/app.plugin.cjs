@@ -7,6 +7,7 @@ const {
   withSettingsGradle,
   withXcodeProject,
   IOSConfig,
+  withPlugins,
 } = require("@expo/config-plugins");
 const path = require("node:path");
 const { syncLynxAssets } = require("./asset-sync.cjs");
@@ -78,6 +79,31 @@ function assertOptions(options) {
     typeof options.syncBundle !== "boolean"
   )
     throw new Error("@lynxship/expo syncBundle must be a boolean");
+  if (options.notifications !== undefined) {
+    if (
+      typeof options.notifications !== "object" ||
+      options.notifications === null ||
+      typeof options.notifications.enabled !== "boolean"
+    )
+      throw new Error(
+        "@lynxship/expo notifications must be an object with boolean enabled",
+      );
+    if (
+      options.notifications.enableBackgroundRemoteNotifications !== undefined &&
+      typeof options.notifications.enableBackgroundRemoteNotifications !==
+        "boolean"
+    )
+      throw new Error(
+        "@lynxship/expo enableBackgroundRemoteNotifications must be a boolean",
+      );
+  }
+  if (
+    options.notifications?.communicationNotifications !== undefined &&
+    typeof options.notifications.communicationNotifications !== "boolean"
+  )
+    throw new Error(
+      "@lynxship/expo communicationNotifications must be a boolean",
+    );
   if (
     options.embeddedBundle !== undefined &&
     (typeof options.embeddedBundle !== "string" ||
@@ -157,6 +183,14 @@ function withLynxShipInfoPlist(config, options) {
       publicKeys: options.publicKeys || {},
       maxReleaseBytes: options.maxReleaseBytes || 104857600,
     };
+    if (options.notifications?.communicationNotifications) {
+      const activityTypes = Array.isArray(value.modResults.NSUserActivityTypes)
+        ? value.modResults.NSUserActivityTypes
+        : [];
+      if (!activityTypes.includes("INSendMessageIntent"))
+        activityTypes.push("INSendMessageIntent");
+      value.modResults.NSUserActivityTypes = activityTypes;
+    }
     return value;
   });
 }
@@ -286,6 +320,28 @@ function withLynxShipIosAssets(config, options) {
   });
 }
 
+function withLynxShipNotifications(config, options) {
+  const notifications = options.notifications;
+  if (!notifications?.enabled) return config;
+  try {
+    return withPlugins(config, [
+      [
+        "expo-notifications",
+        {
+          ...(notifications.android || {}),
+          enableBackgroundRemoteNotifications:
+            notifications.enableBackgroundRemoteNotifications || false,
+        },
+      ],
+    ]);
+  } catch (error) {
+    throw new Error(
+      "@lynxship/expo notifications requires expo-notifications. Install it with `npx expo install expo-notifications`.",
+      { cause: error },
+    );
+  }
+}
+
 function withLynxShipExpo(config, props = {}) {
   const options = assertOptions({ ...getOptions(config), ...props });
   let result = withLynxShipAndroidManifest(config, options);
@@ -294,7 +350,8 @@ function withLynxShipExpo(config, props = {}) {
   result = withLynxShipAndroidSdk(result);
   result = withLynxShipAndroidAssets(result, options);
   result = withLynxShipIosAssets(result, options);
-  return withLynxShipPodfile(result, options);
+  result = withLynxShipPodfile(result, options);
+  return withLynxShipNotifications(result, options);
 }
 
 module.exports = withLynxShipExpo;

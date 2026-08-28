@@ -1,0 +1,16 @@
+@keyframes lynxship-live-ring-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.62;
+    transform: scale(1.12);
+  }
+}
+
+.lynxship-activity-banner-live-ring {
+  animation: lynxship-live-ring-pulse 1.5s ease-in-out infinite;
+}

@@ -1,5 +1,15 @@
 declare module "react" {
-  export type ReactNode = unknown;
+  export interface ReactElement {
+    readonly type: unknown;
+    readonly props: unknown;
+  }
+  export type ReactNode =
+    | ReactElement
+    | string
+    | number
+    | boolean
+    | null
+    | undefined;
   export type ComponentType<Props = Record<string, unknown>> = (
     props: Props,
   ) => ReactNode;

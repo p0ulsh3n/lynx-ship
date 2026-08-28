@@ -7,6 +7,12 @@ reference application.
 Framework fixtures:
 
 - \`lynx-basic-template\`: installable ReactLynx/Rspeedy smoke-test template.
+- \`lynx-android-demo\`: real Android Lynx host used by local and CI build
+  verification paths.
+- \`lynx-react-tailwind-demo\`: ReactLynx + official Lynx Tailwind preset fixture
+  with assets, state, lists, conditional rendering and interactions. Its
+  \`lynxship.json\` uses only the LynxShip config contract; Expo options belong
+  to an Expo project's app config.
 - \`lynx-octane-fixture\`: official Octane Lynx integration instructions and
   early-access validation boundary.
 - \`miso-lynx-fixture\`: official Miso/Nix bundle instructions and configuration

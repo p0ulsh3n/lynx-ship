@@ -7,6 +7,7 @@ export default [
       "**/node_modules/**",
       "**/coverage/**",
       "**/*.tsbuildinfo",
+      "**/generated/**",
       "**/.vite-temp/**",
       "**/.tools/**",
       "examples/lynx-basic-template/**",

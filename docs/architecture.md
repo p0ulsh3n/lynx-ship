@@ -3,14 +3,21 @@
 LynxShip is a pnpm workspace. The control-plane boundaries are deliberately small:
 
 ```text
-CLI ──HTTP/API──> API (Fastify)
-                    │
-       auth / build-orchestrator / submit / worker-agent
+Lynx project ──> Rspeedy bundle ──> native host or web/desktop adapter
+                                      │
+CLI ──HTTP/API──> API (Fastify)       │   optional runtime packages
+                    │                 ├─ @lynxship/expo / SDKs / OTA
+       auth / build-orchestrator       ├─ @lynxship/lynx-realtime
+       submit / worker-agent           └─ @lynxship/notifications
                     │
        db / queue / storage / signing / build-providers
 ```
 
-`packages/contracts` contains shared DTOs and public domain types only. The dashboard is a React/Vite client of the `/v1` API; it does not contain server logic.
+`packages/contracts` contains shared DTOs and public domain types only. The
+dashboard is a React/Vite client of the `/v1` API; it does not contain server
+logic. `@lynxship/lynx-realtime` and `@lynxship/notifications` are optional
+application-side packages: they do not turn the control plane into the
+developer's messaging, notification or user-data backend.
 
 The runtime selects one adapter per boundary:
 

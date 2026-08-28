@@ -1,0 +1,15 @@
+{
+  "platforms": {
+    "android": {
+      "packageName": "com.lynxship.notifications",
+      "sourceDir": "android"
+    },
+    "ios": {
+      "sourceDir": "ios",
+      "podspecPath": "ios/lynxship-notifications.podspec"
+    },
+    "harmony": {
+      "packageDir": "harmony"
+    }
+  }
+}

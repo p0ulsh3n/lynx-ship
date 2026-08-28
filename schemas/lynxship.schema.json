@@ -45,64 +45,135 @@
     "build": {
       "type": "object",
       "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "miso": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "compiler": { "enum": ["ghcjs", "microhs"] },
-              "attribute": { "type": "string", "minLength": 1 },
-              "artifact": { "type": "string", "minLength": 1 },
-              "microhs": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "version": { "type": "string", "minLength": 1 },
-                  "binary": { "type": "string", "minLength": 1 },
-                  "manifest": { "type": "string", "minLength": 1 },
-                  "manifestUrl": { "type": "string", "format": "uri" },
-                  "cacheDir": { "type": "string", "minLength": 1 },
-                  "publicKey": { "type": "string", "minLength": 1 },
-                  "adapter": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["command"],
-                    "properties": {
-                      "command": { "type": "string", "minLength": 1 },
-                      "args": {
-                        "type": "array",
-                        "items": { "type": "string" }
-                      }
+        "$ref": "#/$defs/buildProfile"
+      }
+    },
+    "submit": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "update": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocolVersion": { "type": "integer", "minimum": 1 },
+        "channel": { "type": "string", "minLength": 1 },
+        "rollout": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "defaultPercentage": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "retentionDays": { "type": "integer", "minimum": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "buildProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "distribution": { "type": "string", "minLength": 1 },
+        "channel": { "type": "string", "minLength": 1 },
+        "environment": { "type": "string", "minLength": 1 },
+        "miso": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "compiler": { "enum": ["ghcjs", "microhs"] },
+            "attribute": { "type": "string", "minLength": 1 },
+            "artifact": { "type": "string", "minLength": 1 },
+            "microhs": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "version": { "type": "string", "minLength": 1 },
+                "binary": { "type": "string", "minLength": 1 },
+                "manifest": { "type": "string", "minLength": 1 },
+                "manifestUrl": { "type": "string", "format": "uri" },
+                "cacheDir": { "type": "string", "minLength": 1 },
+                "publicKey": { "type": "string", "minLength": 1 },
+                "adapter": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["command"],
+                  "properties": {
+                    "command": { "type": "string", "minLength": 1 },
+                    "args": {
+                      "type": "array",
+                      "items": { "type": "string" }
                     }
                   }
                 }
               }
             }
-          },
-          "ios": {
-            "type": "object",
-            "properties": {
-              "configuration": { "type": "string" },
-              "distribution": { "type": "string" },
-              "workspace": { "type": "string" },
-              "project": { "type": "string" },
-              "scheme": { "type": "string" },
-              "exportOptionsPlist": { "type": "string" },
-              "bundleScript": { "type": "string" }
-            },
-            "additionalProperties": false
           }
         },
-        "additionalProperties": true
+        "android": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "artifact": { "type": "string", "minLength": 1 }
+          }
+        },
+        "ios": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "configuration": { "type": "string", "minLength": 1 },
+            "distribution": { "type": "string", "minLength": 1 },
+            "simulator": { "type": "boolean" },
+            "workspace": { "type": "string", "minLength": 1 },
+            "project": { "type": "string", "minLength": 1 },
+            "scheme": { "type": "string", "minLength": 1 },
+            "exportOptionsPlist": { "type": "string", "minLength": 1 },
+            "bundleScript": { "type": "string", "minLength": 1 },
+            "appIcon": { "type": "string", "minLength": 1 }
+          }
+        },
+        "harmony": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "task": { "type": "string", "minLength": 1 },
+            "module": { "type": "string", "minLength": 1 },
+            "mode": { "enum": ["project", "module"] },
+            "product": { "type": "string", "minLength": 1 },
+            "buildMode": { "enum": ["debug", "release"] },
+            "bundleDir": { "type": "string", "minLength": 1 },
+            "artifact": { "type": "string", "minLength": 1 },
+            "signTool": { "type": "string", "minLength": 1 }
+          }
+        },
+        "web": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "environment": { "type": "string", "minLength": 1 },
+            "script": { "type": "string", "minLength": 1 },
+            "artifact": { "type": "string", "minLength": 1 }
+          }
+        },
+        "desktop": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "script": { "type": "string", "minLength": 1 },
+            "artifact": { "type": "string", "minLength": 1 }
+          }
+        }
       }
-    },
-    "submit": { "type": "object" },
-    "update": { "type": "object" },
-    "artifacts": {
-      "type": "object",
-      "properties": { "retentionDays": { "type": "integer", "minimum": 1 } },
-      "additionalProperties": true
     }
   }
 }

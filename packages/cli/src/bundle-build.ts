@@ -138,7 +138,7 @@ async function buildMisoWithMicroHs(
         LYNXSHIP_MICROHS_VERSION: toolchain.version,
         LYNXSHIP_MISO_COMPILER: "microhs",
         LYNXSHIP_MISO_OUTPUT: resolve(root, artifact),
-      },
+      } as NodeJS.ProcessEnv,
       quiet: options.quiet,
       onOutput: options.onOutput,
     });

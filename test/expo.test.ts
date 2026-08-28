@@ -36,6 +36,19 @@ test("Expo configuration defaults are deterministic and safe", () => {
     () => validateLynxShipExpoConfig({ syncBundle: "yes" as never }),
     /syncBundle/,
   );
+  assert.deepEqual(
+    validateLynxShipExpoConfig({
+      notifications: {
+        enabled: true,
+        communicationNotifications: true,
+      },
+    }).notifications,
+    {
+      enabled: true,
+      communicationNotifications: true,
+    },
+  );
+  assert.deepEqual(validateLynxShipExpoConfig({}).notifications, undefined);
 });
 
 test("Expo package contains both native autolink registrations", async () => {
@@ -45,7 +58,7 @@ test("Expo package contains both native autolink registrations", async () => {
     peerDependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
-  assert.equal(packageJson.peerDependencies?.["expo-modules-core"], undefined);
+  assert.equal(packageJson.peerDependencies?.["expo-modules-core"], ">=52");
   assert.equal(packageJson.devDependencies?.["expo-modules-core"], "57.0.13");
   const moduleConfig = JSON.parse(
     await readFile(join(root, "expo-module.config.json"), "utf8"),
@@ -62,6 +75,10 @@ test("Expo package contains both native autolink registrations", async () => {
   assert.match(
     await readFile(join(root, "app.plugin.cjs"), "utf8"),
     /LynxShipOta/,
+  );
+  assert.match(
+    await readFile(join(root, "app.plugin.cjs"), "utf8"),
+    /options\.notifications\?\.communicationNotifications/,
   );
   assert.match(
     await readFile(join(root, "app.plugin.js"), "utf8"),
@@ -101,6 +118,10 @@ test("Expo package contains both native autolink registrations", async () => {
   assert.match(androidView, /activeSequence\(\)/);
   assert.match(androidView, /as\? Application/);
   assert.match(androidView, /LynxEnv\.inst\(\)\.init\(application,/);
+  assert.match(
+    androidView,
+    /LynxViewBuilder\(\)\.setTemplateProvider\(templateProvider\)\.build\(context\)/,
+  );
   assert.doesNotMatch(
     androidView,
     /expo\.modules\.kotlin\.events\.EventDispatcher/,
@@ -114,6 +135,33 @@ test("Expo package contains both native autolink registrations", async () => {
   );
 });
 
+test("Element PAPI demo keeps stable references for nested text nodes", async () => {
+  const source = await readFile(
+    join(
+      import.meta.dirname,
+      "..",
+      "examples",
+      "lynx-android-demo",
+      "src",
+      "main-thread.ts",
+    ),
+    "utf8",
+  );
+  assert.match(source, /const buttonText = __CreateText\(pageId\);/);
+  assert.match(
+    source,
+    /__AppendElement\(buttonText, __CreateRawText\("Tap to test Lynx"\)\)/,
+  );
+  assert.match(source, /let counterRawText = __CreateRawText\("0"\);/);
+  assert.match(
+    source,
+    /__ReplaceElements\(counterText, \[nextCounterRawText\], \[counterRawText\]\)/,
+  );
+  assert.match(source, /__FlushElementTree\(\);/);
+  assert.match(source, /typeof __AddEventListener === "function"/);
+  assert.doesNotMatch(source, /__GetChildren\(button\)\[0\]/);
+});
+
 test("Expo fixture keeps the native plugin and bundle contract visible", async () => {
   const appConfig = JSON.parse(
     await readFile(join(fixture, "app.json"), "utf8"),
@@ -125,6 +173,47 @@ test("Expo fixture keeps the native plugin and bundle contract visible", async (
   assert.ok(plugin);
   assert.equal(plugin[1].embeddedBundle, "main.lynx.bundle");
   assert.match(await readFile(join(fixture, "App.tsx"), "utf8"), /LynxView/);
+});
+
+test("ReactLynx Tailwind fixture keeps the official project entry points", async () => {
+  const demo = join(
+    import.meta.dirname,
+    "..",
+    "examples",
+    "lynx-react-tailwind-demo",
+  );
+  const packageJson = JSON.parse(
+    await readFile(join(demo, "package.json"), "utf8"),
+  ) as { devDependencies?: Record<string, string> };
+  assert.equal(
+    packageJson.devDependencies?.["@lynx-js/tailwind-preset"],
+    "^0.5.1",
+  );
+  assert.equal(packageJson.devDependencies?.tailwindcss, "^3.4.17");
+  assert.match(
+    await readFile(join(demo, "postcss.config.js"), "utf8"),
+    /tailwindcss/,
+  );
+  assert.match(
+    await readFile(join(demo, "tailwind.config.js"), "utf8"),
+    /lynxPreset/,
+  );
+  assert.match(
+    await readFile(join(demo, "src", "index.tsx"), "utf8"),
+    /root\.render/,
+  );
+  assert.match(
+    await readFile(join(demo, "src", "App.tsx"), "utf8"),
+    /className=/,
+  );
+  assert.match(
+    await readFile(join(demo, "src", "App.tsx"), "utf8"),
+    /bindtap=/,
+  );
+  assert.match(
+    await readFile(join(demo, "src", "App.tsx"), "utf8"),
+    /lynxLogo/,
+  );
 });
 
 test("Expo bundle sync copies the full Rspeedy output and is idempotent", async () => {

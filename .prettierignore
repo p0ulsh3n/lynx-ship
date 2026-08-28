@@ -18,3 +18,4 @@ examples/lynx-community-crossplatform/**
 **/android/.gradle/**
 *.tsbuildinfo
 pnpm-lock.yaml
+**/generated/**

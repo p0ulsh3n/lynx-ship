@@ -104,10 +104,16 @@ jobs:
           fixture="$RUNNER_TEMP/lynxship-expo-android"
           pushd "$fixture"
           npm install --no-audit --no-fund
+          android_sdk_tarball="$(find "$RUNNER_TEMP" -maxdepth 1 -type f -name 'lynxship-sdk-android-*.tgz' -print -quit)"
+          ios_sdk_tarball="$(find "$RUNNER_TEMP" -maxdepth 1 -type f -name 'lynxship-sdk-ios-*.tgz' -print -quit)"
+          expo_tarball="$(find "$RUNNER_TEMP" -maxdepth 1 -type f -name 'lynxship-expo-*.tgz' -print -quit)"
+          test -n "$android_sdk_tarball"
+          test -n "$ios_sdk_tarball"
+          test -n "$expo_tarball"
           npm install --no-audit --no-fund \
-            "$RUNNER_TEMP/lynxship-sdk-android-0.1.0.tgz" \
-            "$RUNNER_TEMP/lynxship-sdk-ios-0.1.0.tgz"
-          npx expo install "$RUNNER_TEMP/lynxship-expo-0.1.0.tgz"
+            "$android_sdk_tarball" \
+            "$ios_sdk_tarball"
+          npx expo install "$expo_tarball"
           node <<'NODE'
           const fs = require("node:fs");
           const config = JSON.parse(fs.readFileSync("app.json", "utf8"));

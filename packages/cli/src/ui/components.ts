@@ -234,7 +234,8 @@ export function createProgress(
     spinnerIndex = (spinnerIndex + 1) % spinnerFrames.length;
     bar.update(currentValue, payload(currentLabel));
   }, 120);
-  timer.unref?.();
+  const nodeTimer = timer as unknown as { unref?: () => void };
+  nodeTimer.unref?.();
   const untrack = trackAnimation(() => {
     clearInterval(timer);
     bar.stop();

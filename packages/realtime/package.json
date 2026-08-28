@@ -1,0 +1,58 @@
+{
+  "name": "@lynxship/lynx-realtime",
+  "version": "0.1.0",
+  "description": "Secure, bounded real-time messaging client for Lynx applications.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/realtime"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./presence": {
+      "types": "./dist/presence.d.ts",
+      "import": "./dist/presence.js"
+    },
+    "./receipts": {
+      "types": "./dist/receipts.d.ts",
+      "import": "./dist/receipts.js"
+    },
+    "./activity-stack": {
+      "types": "./dist/activity-stack.d.ts",
+      "import": "./dist/activity-stack.js"
+    },
+    "./react-lynx-banners": {
+      "types": "./dist/react-lynx-banners.d.ts",
+      "import": "./dist/react-lynx-banners.js"
+    },
+    "./react-lynx-banners.css": "./dist/react-lynx-banners.css"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json && node scripts/copy-assets.mjs",
+    "typecheck": "tsc -b tsconfig.json --pretty false"
+  },
+  "dependencies": {
+    "@lynx-js/websocket": "0.0.4"
+  },
+  "peerDependencies": {
+    "@lynx-js/react": ">=0.125.0"
+  },
+  "devDependencies": {
+    "@lynx-js/react": "0.125.0"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "name": "@lynxship/notifications",
+  "version": "0.1.0",
+  "description": "Secure FCM/APNs/Huawei Push Kit notification providers and device registration primitives for LynxShip.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/notifications"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "android",
+    "ios",
+    "harmony",
+    "lynx.lib.json",
+    "types",
+    "generated"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    },
+    "./server": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./expo": {
+      "types": "./dist/expo.d.ts",
+      "import": "./dist/expo.js"
+    },
+    "./lynx": {
+      "types": "./dist/lynx.d.ts",
+      "import": "./dist/lynx.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false",
+    "codegen": "lynx-autolink-codegen"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@lynx-js/autolink-codegen": "0.4.1",
+    "@types/pg": "8.23.1",
+    "pg": "8.23.0"
+  },
+  "peerDependencies": {
+    "expo-constants": ">=52",
+    "expo-notifications": ">=0.29",
+    "pg": ">=8.23.0",
+    "react-native": ">=0.76"
+  },
+  "peerDependenciesMeta": {
+    "expo-constants": {
+      "optional": true
+    },
+    "expo-notifications": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    }
+  }
+}

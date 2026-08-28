@@ -12,7 +12,7 @@ artifacts, store submission and signed OTA updates in one explicit workflow.
 > official packaging configuration. Store submission still requires the
 > developer's own Apple or Google accounts and the stores' review steps.
 
-[Documentation](docs/) · [CLI design system](docs/cli.md) · [Operations](docs/operations.md) · [Compatibility](docs/compatibility.md)
+[Documentation](docs/) · [Package catalog](docs/package-catalog.md) · [CLI design system](docs/cli.md) · [Operations](docs/operations.md) · [Compatibility](docs/compatibility.md)
 
 ## Contributor skills
 
@@ -270,6 +270,27 @@ configuration and verification workflow.
 The plugin API does not pretend to be a hosted EAS replacement by itself:
 cloud workers, credentials, store providers and a template registry remain
 separate services with their own release and security review.
+
+### Runtime packages
+
+The workspace also contains optional runtime packages for application teams:
+
+- `@lynxship/lynx-realtime` provides a bounded client protocol for messages,
+  presence, typing/recording activity and read receipts. It does not provide a
+  backend, user database or media-call service; the application backend owns
+  authentication, authorization and durable message state.
+- `@lynxship/notifications` provides mobile registration and provider adapters
+  for FCM, APNs and Huawei Push Kit. Its optional `server` entry point is for a
+  Node backend; PostgreSQL and provider credentials never belong in the mobile
+  bundle. Python, Go, Rust, PHP and other backends can implement the documented
+  HTTPS contract instead.
+- `@lynxship/expo` embeds LynxView in an Expo native project and synchronizes a
+  project-owned Lynx bundle during Expo prebuild. Expo and EAS remain the
+  native build service; LynxShip supplies the Lynx integration layer.
+
+These packages are optional and independent. Their package READMEs document
+the public contracts and the [package catalog](docs/package-catalog.md) lists
+which workspace packages are publishable.
 
 ## What LynxShip does
 
@@ -913,47 +934,68 @@ npm config set registry https://registry.npmjs.org/
 npm whoami
 pnpm install --frozen-lockfile
 pnpm --filter @lynxship/plugin-api build
-pnpm --filter @lynxship/cli... build
+pnpm --filter @lynxship/cli build
 pnpm --filter create-lynxship-app build
+pnpm --filter @lynxship/expo build
+pnpm --filter @lynxship/lynx-realtime build
+pnpm --filter @lynxship/notifications build
 pnpm --filter @lynxship/plugin-api pack --dry-run
 pnpm --filter @lynxship/cli pack --dry-run
 pnpm --filter create-lynxship-app pack --dry-run
+pnpm --filter @lynxship/expo pack --dry-run
+pnpm --filter @lynxship/lynx-realtime pack --dry-run
+pnpm --filter @lynxship/notifications pack --dry-run
 
-# Publish only the public packages whose versions changed.
+# Publish only the public packages whose versions changed. Do not publish
+# private service/worker packages or packages whose version was not bumped.
 pnpm --filter @lynxship/plugin-api publish --access public --no-git-checks
 pnpm --filter @lynxship/cli publish --access public --no-git-checks
 pnpm --filter create-lynxship-app publish --access public --no-git-checks
 ```
 
 The `@lynxship` scope must belong to the publishing npm account or
-organization, and `npm whoami` must show the authorized account. The public
-runtime packages are already released separately; publish a changed runtime
-package before the CLI only if its version or source changed. Verify the
-published result with:
+organization, and `npm whoami` must show the authorized account. Runtime
+packages in this workspace are independent releases: publish a runtime
+package before the CLI only when its version and source are ready, and publish
+the CLI only after its runtime dependencies are available from the registry.
+Verify each published result with:
 
 ```bash
 npm view @lynxship/cli version
 npm view @lynxship/plugin-api version
 npm view create-lynxship-app version
+npm view @lynxship/expo version
+npm view @lynxship/lynx-realtime version
+npm view @lynxship/notifications version
 npm install --global @lynxship/cli@latest
 ```
+
+For maintainers using GitHub Actions, npm Trusted Publishing with OIDC is
+preferred to a long-lived publish token. Configure the exact repository and
+workflow in npm first, then publish from a cloud-hosted runner and verify the
+provenance record on npm. Manual publishing remains possible when the account
+policy requires it.
 
 ## Repository layout
 
 ```text
 packages/cli                  Terminal CLI and release workflows
 packages/create-app           Standalone create-lynxship-app generator
+packages/expo                 Expo LynxView/config-plugin integration
+packages/realtime             Optional Lynx real-time client and banners
+packages/notifications        Optional push registration/provider adapters
 packages/api                  Fastify control-plane API
 packages/dashboard            React/TanStack/Tailwind dashboard
 packages/sdk-android          Android OTA client
 packages/sdk-ios              iOS OTA client
 packages/*                    Contracts, storage, queue, signing and workers
 examples/lynx-android-demo    Real LynxJS Android integration
+examples/lynx-react-tailwind-demo ReactLynx/Tailwind styling and asset fixture
 examples/lynx-basic-template Minimal LynxJS smoke-test template
 examples/lynx-octane-fixture  Octane Lynx validation notes
 examples/miso-lynx-fixture    Miso/Nix validation notes
 compose.yaml                  PostgreSQL, Redis and API development profile
-docs/                         Architecture, operations and acceptance docs
+docs/                         Index, catalog, architecture and acceptance docs
 ```
 
 ## Documentation
@@ -971,6 +1013,8 @@ docs/                         Architecture, operations and acceptance docs
   evidence and remaining production gates.
 - [docs/target-fixtures.md](docs/target-fixtures.md): reproducible external
   framework and platform validation.
+- [docs/package-catalog.md](docs/package-catalog.md): public/private package
+  boundaries and runtime package ownership.
 
 ## License
 

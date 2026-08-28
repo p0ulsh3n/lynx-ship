@@ -55,7 +55,9 @@ class LynxShipExpoView(context: Context, appContext: AppContext) : ExpoView(cont
 
     init {
         initializeLynx(context)
-        lynxView = LynxViewBuilder().setTemplateProvider(templateProvider).build(applicationContext)
+        // The Lynx view must be created with the host/view context. Keep the
+        // application context only for process-wide services and storage.
+        lynxView = LynxViewBuilder().setTemplateProvider(templateProvider).build(context)
         lynxView.addLynxViewClient(object : LynxViewClient() {
             override fun onFirstScreen() {
                 try {

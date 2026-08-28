@@ -51,28 +51,33 @@ __AppendElement(counterCard, counterLabel);
 
 const counterText = __CreateText(pageId);
 __SetClasses(counterText, "counter");
-__AppendElement(counterText, __CreateRawText("0"));
+let counterRawText = __CreateRawText("0");
+__AppendElement(counterText, counterRawText);
 __AppendElement(counterCard, counterText);
 
 const button = __CreateView(pageId);
 __SetClasses(button, "button");
 __SetAttribute(button, "aria-label", "Increment demo counter");
-__AppendElement(button, __CreateText(pageId));
-const buttonText = __GetChildren(button)[0];
-if (buttonText)
-  __AppendElement(buttonText, __CreateRawText("Tap to test Lynx"));
+const buttonText = __CreateText(pageId);
+__AppendElement(button, buttonText);
+__AppendElement(buttonText, __CreateRawText("Tap to test Lynx"));
 __AppendElement(root, button);
 
 let count = 0;
 
 function updateCounter(): void {
   count += 1;
-  __ReplaceElements(
-    counterText,
-    [__CreateRawText(String(count))],
-    __GetChildren(counterText),
-  );
+  const nextCounterRawText = __CreateRawText(String(count));
+  __ReplaceElements(counterText, [nextCounterRawText], [counterRawText]);
+  counterRawText = nextCounterRawText;
   __FlushElementTree();
 }
 
-__AddEventListener(button, "tap", updateCounter, {});
+// Commit the initial tree before relying on a later event or update.
+__FlushElementTree();
+
+// __AddEventListener is newer than the core Element PAPI tree operations.
+// Keep the static screen usable on older native runtimes.
+if (typeof __AddEventListener === "function") {
+  __AddEventListener(button, "tap", updateCounter, {});
+}

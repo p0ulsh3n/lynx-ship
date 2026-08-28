@@ -11,6 +11,17 @@ export interface LynxShipExpoConfig {
   syncBundle?: boolean;
   lynxVersion?: string;
   maxReleaseBytes?: number;
+  notifications?: {
+    enabled?: boolean;
+    enableBackgroundRemoteNotifications?: boolean;
+    /** Add the iOS messaging intent declaration for rich communication alerts. */
+    communicationNotifications?: boolean;
+    android?: {
+      icon?: string;
+      color?: string;
+      defaultChannel?: string;
+    };
+  };
 }
 
 /** Let the native package manager resolve the current Lynx SDK by default. */
@@ -48,6 +59,31 @@ export function validateLynxShipExpoConfig(
   }
   if (value.syncBundle !== undefined && typeof value.syncBundle !== "boolean")
     throw new Error("LynxShip Expo syncBundle must be a boolean");
+  if (value.notifications !== undefined) {
+    if (
+      typeof value.notifications !== "object" ||
+      value.notifications === null ||
+      typeof value.notifications.enabled !== "boolean"
+    )
+      throw new Error(
+        "LynxShip Expo notifications must be an object with boolean enabled",
+      );
+    if (
+      value.notifications.enableBackgroundRemoteNotifications !== undefined &&
+      typeof value.notifications.enableBackgroundRemoteNotifications !==
+        "boolean"
+    )
+      throw new Error(
+        "LynxShip Expo enableBackgroundRemoteNotifications must be a boolean",
+      );
+    if (
+      value.notifications.communicationNotifications !== undefined &&
+      typeof value.notifications.communicationNotifications !== "boolean"
+    )
+      throw new Error(
+        "LynxShip Expo communicationNotifications must be a boolean",
+      );
+  }
   if (
     value.lynxVersion !== undefined &&
     value.lynxVersion !== "auto" &&

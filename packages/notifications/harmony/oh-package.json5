@@ -1,0 +1,11 @@
+{
+  name: "@lynxship/notifications",
+  version: "0.1.0",
+  description: "HarmonyOS Push Kit bridge for LynxShip notifications.",
+  main: "Index.ets",
+  license: "MIT",
+  dependencies: {
+    "@lynx/lynx": "4.0.0",
+    "@lynx/primjs": "4.0.0",
+  },
+}

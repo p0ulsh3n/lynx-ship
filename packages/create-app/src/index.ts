@@ -140,7 +140,9 @@ export function parseArguments(args: string[]): CreateAppOptions & {
 }
 
 export function detectPackageManager(
-  environment: NodeJS.ProcessEnv = process.env,
+  environment: { npm_config_user_agent?: string } = process.env as {
+    npm_config_user_agent?: string;
+  },
 ): PackageManager {
   const userAgent = environment.npm_config_user_agent ?? "";
   if (userAgent.startsWith("pnpm")) return "pnpm";

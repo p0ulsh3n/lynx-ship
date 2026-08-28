@@ -1,0 +1,26 @@
+{
+  "$schema": "../../schemas/lynxship.schema.json",
+  "projectId": "lynxship_react_tailwind_demo",
+  "runtimeVersion": {
+    "policy": "fingerprint"
+  },
+  "build": {
+    "development": {
+      "distribution": "development",
+      "channel": "development",
+      "environment": "development"
+    },
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "environment": "production"
+    }
+  },
+  "update": {
+    "protocolVersion": 1,
+    "channel": "production",
+    "rollout": {
+      "defaultPercentage": 100
+    }
+  }
+}
