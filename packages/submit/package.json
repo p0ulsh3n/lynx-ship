@@ -4,6 +4,11 @@
   "description": "Google Play and App Store Connect submission contracts for LynxShip.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/submit"
+  },
   "files": [
     "dist"
   ],

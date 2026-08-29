@@ -1,0 +1,5 @@
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path name="lynxship_media" path="Pictures/" />
+    <external-files-path name="lynxship_audio" path="Music/" />
+    <cache-path name="lynxship_cache" path="media/" />
+</paths>

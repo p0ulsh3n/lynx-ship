@@ -80,6 +80,7 @@
     "@lynxship/contracts": "workspace:*",
     "@lynxship/db": "workspace:*",
     "@lynxship/microhs": "workspace:*",
+    "@lynxship/i18n": "workspace:*",
     "@lynxship/plugin-api": "workspace:*",
     "@lynxship/signing": "workspace:*",
     "@lynxship/submit": "workspace:*",

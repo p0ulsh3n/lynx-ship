@@ -1,0 +1,7 @@
+{
+  module: {
+    name: "lynxship_device_storage",
+    type: "har",
+    deviceTypes: ["default"],
+  },
+}

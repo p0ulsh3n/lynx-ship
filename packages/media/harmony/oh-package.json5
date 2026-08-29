@@ -1,0 +1,7 @@
+{
+  name: "@lynxship/media",
+  version: "0.1.0",
+  description: "System media picker bridge for Lynx applications.",
+  main: "Index.ets",
+  license: "MIT",
+}

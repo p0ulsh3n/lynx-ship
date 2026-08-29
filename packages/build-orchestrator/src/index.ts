@@ -1,6 +1,7 @@
 import {
   assert,
   createId,
+  LynxShipError,
   type BuildJob,
   type BuildState,
   type Platform,
@@ -93,6 +94,16 @@ export interface BuildExecutor {
   execute(job: BuildJob): Promise<BuildJob>;
 }
 
+/** Prevents a control-plane caller from silently accepting a fake build. */
+export class UnconfiguredBuildExecutor implements BuildExecutor {
+  async execute(_job: BuildJob): Promise<never> {
+    throw new LynxShipError(
+      "BUILD_EXECUTOR_REQUIRED",
+      "Configure an isolated build executor or explicitly use the local executor",
+    );
+  }
+}
+
 export interface BuildWorkerReport {
   state: BuildState;
   reason?: string;
@@ -120,13 +131,28 @@ export class LocalBuildExecutor implements BuildExecutor {
 }
 
 export class BuildOrchestrator {
-  readonly jobs = new Map<string, BuildJob>();
+  private readonly jobStore = new Map<string, BuildJob>();
 
-  constructor(readonly executor: BuildExecutor = new LocalBuildExecutor()) {}
+  constructor(
+    readonly executor: BuildExecutor = new UnconfiguredBuildExecutor(),
+  ) {}
+
+  /**
+   * Read-only snapshot used by persistence and diagnostics. Mutations must go
+   * through the orchestrator so state transitions remain validated.
+   */
+  get jobs(): ReadonlyMap<string, BuildJob> {
+    return new Map(this.jobStore);
+  }
+
+  restore(jobs: readonly BuildJob[]): void {
+    this.jobStore.clear();
+    for (const job of jobs) this.jobStore.set(job.id, job);
+  }
 
   async create(input: CreateBuildInput): Promise<BuildJob> {
     const job = createBuild(input);
-    this.jobs.set(job.id, job);
+    this.jobStore.set(job.id, job);
     return job;
   }
 
@@ -176,13 +202,13 @@ export class BuildOrchestrator {
   }
 
   get(id: string): BuildJob {
-    const job = this.jobs.get(id);
+    const job = this.jobStore.get(id);
     assert(job, "BUILD_NOT_FOUND", "Build not found");
     return job;
   }
 
   list(): BuildJob[] {
-    return [...this.jobs.values()];
+    return [...this.jobStore.values()];
   }
 }
 

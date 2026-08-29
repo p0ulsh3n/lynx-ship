@@ -6,7 +6,7 @@
   "type": "module",
   "packageManager": "pnpm@11.19.0",
   "scripts": {
-    "test": "pnpm --filter @lynxship/microhs build && pnpm --filter @lynxship/lynx-realtime build && pnpm --filter @lynxship/notifications build && pnpm --filter @lynxship/expo build && pnpm --filter @lynxship/cli build && pnpm --filter create-lynxship-app build && tsx --test test/core.test.ts test/api.test.ts test/cli.test.ts test/cli-ui.test.ts test/create-app.test.ts test/plugins.test.ts test/microhs.test.ts test/expo.test.ts test/realtime.test.ts test/notifications.test.ts",
+    "test": "pnpm --filter @lynxship/asset-pipeline build && pnpm --filter @lynxship/lynx-library-tools build && pnpm --filter @lynxship/test-kit build && pnpm --filter @lynxship/i18n build && pnpm --filter @lynxship/permissions build && pnpm --filter @lynxship/router build && pnpm --filter @lynxship/device-storage build && pnpm --filter @lynxship/observability build && pnpm --filter @lynxship/ui-tokens build && pnpm --filter @lynxship/tailwind-lynx build && pnpm --filter @lynxship/lynxtron build && pnpm --filter @lynxship/media build && pnpm --filter @lynxship/microhs build && pnpm --filter @lynxship/lynx-realtime build && pnpm --filter @lynxship/notifications build && pnpm --filter @lynxship/expo build && pnpm --filter @lynxship/worker-android build && pnpm --filter @lynxship/worker-ios build && pnpm --filter @lynxship/cli build && pnpm --filter create-lynxship-app build && tsx --test --test-concurrency=1 test/core.test.ts test/api.test.ts test/cli.test.ts test/cli-ui.test.ts test/create-app.test.ts test/plugins.test.ts test/microhs.test.ts test/expo.test.ts test/realtime.test.ts test/notifications.test.ts test/lynx-library-tools.test.ts test/asset-pipeline.test.ts test/native-packages.test.ts test/test-kit.test.ts test/i18n.test.ts test/i18next.test.ts test/intl.test.ts test/permissions.test.ts test/router.test.ts test/device-storage.test.ts test/observability.test.ts test/ui-tokens.test.ts test/tailwind-lynx.test.ts test/lynxtron.test.ts test/media.test.ts test/workers.test.ts test/db.test.ts test/build-providers.test.ts",
     "lint": "pnpm architecture:check && pnpm structure:check && tsx scripts/lint.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -19,8 +19,9 @@
     "dashboard:dev": "pnpm --filter @lynxship/dashboard dev",
     "dashboard:build": "pnpm --filter @lynxship/dashboard build",
     "typecheck": "pnpm -r typecheck",
-    "architecture:check": "node scripts/check-architecture.mjs",
-    "skills:check-links": "node scripts/check-skill-links.mjs"
+    "architecture:check": "node scripts/check-architecture.mjs && node scripts/check-package-contracts.mjs",
+    "skills:check-links": "node scripts/check-skill-links.mjs",
+    "i18n:fixture:check": "node scripts/check-i18n-fixture.mjs"
   },
   "engines": {
     "node": ">=22.0.0"

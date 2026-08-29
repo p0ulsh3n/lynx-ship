@@ -22,14 +22,29 @@ export class FileStorage {
     await mkdir(this.root, { recursive: true });
     const file = join(this.root, hash);
     try {
-      await readFile(file);
+      const existing = await readFile(file);
+      assert(
+        sha256(existing) === hash,
+        "STORAGE_INTEGRITY",
+        "Existing content-addressed object does not match its hash",
+      );
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT")
-        await writeFile(file, buffer.toString("latin1"), {
-          flag: "wx",
-          encoding: "latin1",
-        });
-      else throw error;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        try {
+          await writeFile(file, buffer as unknown as Uint8Array<ArrayBuffer>, {
+            flag: "wx",
+          });
+        } catch (writeError) {
+          if ((writeError as NodeJS.ErrnoException).code !== "EEXIST")
+            throw writeError;
+          const existing = await readFile(file);
+          assert(
+            sha256(existing) === hash,
+            "STORAGE_INTEGRITY",
+            "Concurrent content-addressed write produced invalid content",
+          );
+        }
+      } else throw error;
     }
     return {
       key: `sha256/${hash}`,
@@ -40,6 +55,7 @@ export class FileStorage {
   }
 
   get(hash: string) {
+    assertHash(hash);
     return readFile(join(this.root, hash));
   }
 }
@@ -84,6 +100,7 @@ export class S3ObjectStorage {
     data: Buffer | string,
     contentType = "application/octet-stream",
   ): Promise<void> {
+    assertObjectKey(key);
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -95,6 +112,7 @@ export class S3ObjectStorage {
   }
 
   async get(key: string): Promise<Buffer> {
+    assertObjectKey(key);
     const result = await this.client.send(
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
     );
@@ -107,6 +125,7 @@ export class S3ObjectStorage {
   }
 
   async head(key: string): Promise<{ size: number; contentType?: string }> {
+    assertObjectKey(key);
     const result = await this.client.send(
       new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
     );
@@ -126,12 +145,42 @@ export class S3ObjectStorage {
   }
 }
 
+function assertHash(hash: string): void {
+  assert(
+    /^[0-9a-f]{64}$/.test(hash),
+    "STORAGE_HASH_INVALID",
+    "Storage object hash must be a lowercase SHA-256 digest",
+  );
+}
+
+function assertObjectKey(key: string): void {
+  assert(
+    key.length > 0 &&
+      key.length <= 1024 &&
+      !key.includes("\0") &&
+      !key.startsWith("/") &&
+      !/(^|\/)\.\.(\/|$)/.test(key),
+    "STORAGE_KEY_INVALID",
+    "Storage object key contains an unsupported path",
+  );
+}
+
 export function validatePresignedAccess(input: {
   provider?: string;
   endpoint: string;
   customDomain?: boolean;
 }) {
   assert(input.endpoint, "STORAGE_ENDPOINT", "Storage endpoint is required");
+  let endpoint: URL | undefined;
+  try {
+    endpoint = new URL(input.endpoint);
+  } catch {}
+  assert(endpoint, "STORAGE_ENDPOINT", "Storage endpoint must be a valid URL");
+  assert(
+    endpoint.protocol === "https:",
+    "STORAGE_ENDPOINT",
+    "Storage endpoint must use HTTPS",
+  );
   if (input.provider === "r2" && input.customDomain)
     return {
       allowed: false,

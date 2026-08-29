@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   EncryptedPushTokenStore,
+  PostgresPushTokenStore,
   FcmProvider,
   HuaweiPushProvider,
   NotificationError,
@@ -51,6 +52,95 @@ test("encrypts device tokens and never exposes them in snapshots", async () => {
   );
   await store.disable(record.id);
   assert.equal((await store.listActive(destination)).length, 0);
+});
+
+test("Postgres token reads observe changes made by another process", async () => {
+  const rows: Array<Record<string, unknown>> = [];
+  const pool = {
+    async query(sql: string, params: unknown[] = []) {
+      const normalized = sql.replace(/\s+/g, " ").trim();
+      if (
+        normalized.startsWith("SELECT") &&
+        normalized.includes("FROM lynxship_push_tokens")
+      ) {
+        const selected = normalized.includes("WHERE")
+          ? rows.filter(
+              (row) =>
+                row.userId === params[0] &&
+                row.organizationId === params[1] &&
+                row.projectId === params[2] &&
+                row.disabledAt === null,
+            )
+          : rows;
+        return { rows: selected.map((row) => ({ ...row })) };
+      }
+      if (normalized.startsWith("INSERT")) {
+        const [
+          id,
+          userId,
+          organizationId,
+          projectId,
+          platform,
+          appId,
+          environment,
+          tokenHash,
+          iv,
+          tag,
+          ciphertext,
+          createdAt,
+          updatedAt,
+          lastSuccessAt,
+          disabledAt,
+        ] = params;
+        const existing = rows.findIndex((row) => row.id === id);
+        const row = {
+          id,
+          userId,
+          organizationId,
+          projectId,
+          platform,
+          appId,
+          environment,
+          tokenHash,
+          iv,
+          tag,
+          ciphertext,
+          createdAt,
+          updatedAt,
+          lastSuccessAt,
+          disabledAt,
+        };
+        if (existing >= 0) rows[existing] = { ...rows[existing], ...row };
+        else rows.push(row);
+        return { rows: [] };
+      }
+      if (normalized.startsWith("UPDATE")) {
+        const row = rows.find((candidate) => candidate.id === params[0]);
+        if (row) {
+          if (normalized.includes("disabled_at")) row.disabledAt = params[1];
+          if (normalized.includes("last_success_at"))
+            row.lastSuccessAt = params[1];
+          row.updatedAt = params[1];
+        }
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {},
+  } as unknown as NonNullable<
+    ConstructorParameters<typeof PostgresPushTokenStore>[2]
+  >["pool"];
+  const first = new PostgresPushTokenStore("postgres://test", "master-key", {
+    pool,
+  });
+  const second = new PostgresPushTokenStore("postgres://test", "master-key", {
+    pool,
+  });
+  const record = await first.register(destination);
+  assert.equal((await second.listActive(destination)).length, 1);
+  await first.disable(record.id);
+  assert.equal((await second.listActive(destination)).length, 0);
+  await first.close();
 });
 
 test("presence push payloads are short-lived and coalescible", () => {
@@ -540,6 +630,43 @@ test("pure Lynx registration uses NativeModules and handles token rotation", asy
   assert.equal(cleared, true);
 });
 
+test("pure Lynx registration keeps listening when the first token is unavailable", async () => {
+  let listener: ((token: string) => void) | undefined;
+  const requests: string[] = [];
+  const result = await LynxNativeNotifications.register({
+    userId: "user-1",
+    organizationId: "org-1",
+    projectId: "project-1",
+    platform: "android",
+    appId: "com.example.app",
+    endpoint: "https://api.example.com/v1/push/registrations",
+    accessToken: "session-token",
+    nativeModule: {
+      requestPermission: (callback) => callback(true),
+      getToken: (callback) => callback(""),
+      subscribeTokenChanges: (callback) => {
+        listener = callback;
+        return {
+          remove: () => {
+            listener = undefined;
+          },
+        };
+      },
+    },
+    fetch: async (_input, init) => {
+      requests.push(String(init?.body));
+      return new Response(null, { status: 204 });
+    },
+  });
+  assert.equal(result.status, "unavailable");
+  listener?.("token-after-startup");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(requests.length, 1);
+  assert.match(requests[0] ?? "", /token-after-startup/);
+  result.stop();
+  assert.equal(listener, undefined);
+});
+
 test("pure Lynx registration supports the asynchronous HarmonyOS bridge", async () => {
   let registered: Record<string, unknown> | undefined;
   const result = await LynxNativeNotifications.register({
@@ -636,7 +763,7 @@ test("pure Lynx package publishes a complete Autolink contract", async () => {
 });
 
 test("iOS rich notification extension is publishable and isolated from the main pod", async () => {
-  const [service, info, podspec] = await Promise.all([
+  const [service, info, podspec, module] = await Promise.all([
     readFile(
       resolve(
         notificationsPackageRoot,
@@ -655,12 +782,22 @@ test("iOS rich notification extension is publishable and isolated from the main 
       resolve(notificationsPackageRoot, "ios/lynxship-notifications.podspec"),
       "utf8",
     ),
+    readFile(
+      resolve(notificationsPackageRoot, "ios/LynxShipNotificationsModule.m"),
+      "utf8",
+    ),
   ]);
   assert.match(service, /UNNotificationServiceExtension/);
   assert.match(service, /INSendMessageIntent/);
   assert.match(service, /INPerson/);
   assert.match(service, /1_048_576/);
   assert.match(service, /https/);
+  assert.match(service, /NSLock/);
+  assert.match(service, /didComplete/);
+  assert.match(service, /Calls Apple's completion handler exactly once/);
+  assert.doesNotMatch(service, /contentHandler\?\(/);
+  assert.match(module, /getNotificationSettingsWithCompletionHandler/);
+  assert.doesNotMatch(module, /- \(BOOL\)requestPermission \{\s*return NO;/);
   assert.match(info, /com\.apple\.usernotifications\.service/);
   assert.match(info, /LynxShipNotificationService/);
   assert.match(podspec, /exclude_files.*NotificationServiceExtension/);

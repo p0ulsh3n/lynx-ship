@@ -21,7 +21,7 @@ const lineCountBaselines = new Map([
   ["packages/cli/src/guidance/catalog.ts", 600],
   [
     "packages/sdk-android/src/main/java/com/lynxship/sdk/android/LynxShipOtaClient.java",
-    600,
+    500,
   ],
   ["packages/realtime/src/client/core.ts", 400],
   ["packages/realtime/src/presence/client.ts", 500],

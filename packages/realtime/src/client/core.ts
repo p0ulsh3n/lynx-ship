@@ -147,7 +147,8 @@ export class RealtimeError extends Error {
     | "PROTOCOL_ERROR"
     | "CONNECTION_TIMEOUT"
     | "HEARTBEAT_TIMEOUT"
-    | "SOCKET_ERROR";
+    | "SOCKET_ERROR"
+    | "CALLBACK_ERROR";
 
   constructor(
     code: RealtimeError["code"],

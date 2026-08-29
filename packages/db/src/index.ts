@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { assert, canonicalize, sha256 } from "@lynxship/contracts";
 
@@ -9,12 +10,14 @@ export interface StateRepository<T> {
 }
 
 export class JsonRepository<T> {
+  private writeQueue: Promise<void> = Promise.resolve();
+
   constructor(
     readonly file: string,
     readonly initial: T,
   ) {}
 
-  async read(): Promise<T> {
+  private async readRaw(): Promise<T> {
     try {
       return JSON.parse(await readFile(this.file, "utf8")) as T;
     } catch (error) {
@@ -23,16 +26,37 @@ export class JsonRepository<T> {
     }
   }
 
-  async write(value: T): Promise<T> {
+  private async writeRaw(value: T): Promise<T> {
     await mkdir(dirname(this.file), { recursive: true });
-    const temporary = `${this.file}.tmp`;
+    const temporary = `${this.file}.${randomUUID()}.tmp`;
     await writeFile(temporary, JSON.stringify(value, null, 2) + "\n");
     await rename(temporary, this.file);
     return value;
   }
 
+  private enqueue<R>(operation: () => Promise<R>): Promise<R> {
+    const result = this.writeQueue.then(operation);
+    this.writeQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  async read(): Promise<T> {
+    await this.writeQueue;
+    return this.readRaw();
+  }
+
+  async write(value: T): Promise<T> {
+    return this.enqueue(() => this.writeRaw(value));
+  }
+
   async update(mutator: (current: T) => T | Promise<T>): Promise<T> {
-    return this.write(await mutator(await this.read()));
+    return this.enqueue(async () => {
+      const current = await this.readRaw();
+      return this.writeRaw(await mutator(current));
+    });
   }
 }
 

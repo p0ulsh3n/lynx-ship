@@ -1,0 +1,7 @@
+{
+  name: "@lynxship/device-storage",
+  version: "0.1.0",
+  description: "Persistent device storage bridge for Lynx applications.",
+  main: "Index.ets",
+  license: "MIT",
+}

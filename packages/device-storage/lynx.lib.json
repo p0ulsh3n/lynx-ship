@@ -1,0 +1,13 @@
+{
+  "platforms": {
+    "android": {
+      "packageName": "com.lynxship.devicestorage",
+      "sourceDir": "android"
+    },
+    "ios": {
+      "sourceDir": "ios",
+      "podspecPath": "ios/lynxship-device-storage.podspec"
+    },
+    "harmony": { "packageDir": "harmony" }
+  }
+}

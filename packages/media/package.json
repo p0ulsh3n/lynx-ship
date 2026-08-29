@@ -1,0 +1,56 @@
+{
+  "name": "@lynxship/media",
+  "version": "0.1.0",
+  "description": "Capability-based media contracts for Lynx hosts and native adapters.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/media"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "android/build.gradle",
+    "android/consumer-rules.pro",
+    "android/src",
+    "ios/*.podspec",
+    "ios/*.h",
+    "ios/*.m",
+    "harmony/build-profile.json5",
+    "harmony/hvigorfile.ts",
+    "harmony/Index.ets",
+    "harmony/oh-package.json5",
+    "harmony/src",
+    "lynx.lib.json",
+    "types"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./types/index.d.ts"
+    },
+    "./lynx": {
+      "types": "./dist/lynx.d.ts",
+      "import": "./dist/lynx.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false",
+    "codegen": "lynx-autolink-codegen"
+  },
+  "devDependencies": {
+    "@lynx-js/autolink-codegen": "0.4.1"
+  }
+}

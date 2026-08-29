@@ -11,6 +11,7 @@ import { TokenManager, scopesForRole } from "@lynxship/auth";
 import {
   transitionBuild,
   BuildService,
+  LocalBuildExecutor,
   runtimeFingerprint,
   BuildCache,
   createSourceManifest,
@@ -31,6 +32,7 @@ import { RedisWorkerRuntime, WorkerRegistry } from "@lynxship/worker-agent";
 import type { RedisQueue } from "@lynxship/queue";
 import {
   SubmissionService,
+  MockSubmissionProvider,
   GooglePlayProvider,
   AppStoreConnectProvider,
   GooglePlayApiProvider,
@@ -52,7 +54,7 @@ import {
   FixedWindowRateLimiter,
 } from "@lynxship/api";
 import { LeaseQueue } from "@lynxship/queue";
-import { validatePresignedAccess } from "@lynxship/storage";
+import { FileStorage, validatePresignedAccess } from "@lynxship/storage";
 import {
   createBackup,
   restoreBackup,
@@ -127,7 +129,7 @@ test("runtime fingerprint changes with native code and Lynx autolink manifests",
   assert.notEqual(second.value, third.value);
 });
 test("OTA compatibility requires a successful binary with the same runtime fingerprint", async () => {
-  const builds = new BuildService();
+  const builds = new BuildService(new LocalBuildExecutor());
   const job = await builds.create({
     projectId: "p",
     organizationId: "o",
@@ -232,10 +234,19 @@ test("tokens are shown once, scoped and revocable", () => {
   assert.throws(() => manager.authenticate(created.value), {
     code: "AUTH_REVOKED",
   });
+  assert.throws(
+    () =>
+      manager.create({
+        name: "expired",
+        organizationId: "org",
+        expiresAt: "not-a-date",
+      }),
+    { code: "TOKEN_EXPIRY" },
+  );
   assert.deepEqual(scopesForRole("viewer"), ["project:read"]);
 });
 test("build state machine completes and rejects invalid transitions", async () => {
-  const service = new BuildService();
+  const service = new BuildService(new LocalBuildExecutor());
   const job = await service.create({
     projectId: "p",
     organizationId: "o",
@@ -248,6 +259,24 @@ test("build state machine completes and rejects invalid transitions", async () =
   const result = await service.run(job.id);
   assert.equal(result.state, "success");
   assert.equal(result.transitions.at(-1)?.state, "success");
+});
+test("build orchestrator never fabricates success without an executor", async () => {
+  const service = new BuildService();
+  const job = await service.create({
+    projectId: "p",
+    organizationId: "o",
+    platform: "android",
+    profile: "production",
+  });
+
+  await assert.rejects(
+    () => service.run(job.id),
+    (error: unknown) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "BUILD_EXECUTOR_REQUIRED",
+  );
+  assert.equal(job.state, "created");
 });
 test("Ed25519 signatures cover canonical OTA manifests", () => {
   const keys = createSigningKey();
@@ -388,8 +417,53 @@ test("worker runtime acknowledges only after the handler succeeds", async () => 
   await runtime.run(async (_payload) => runtime.stop());
   assert.deepEqual(acknowledgements, ["1-0"]);
 });
+test("worker runtime renews long-running leases before acknowledging", async () => {
+  const acknowledgements: string[] = [];
+  const renewals: string[] = [];
+  let delivered = false;
+  const fakeQueue = {
+    reclaim: async () => [],
+    consume: async () => {
+      if (delivered) return [];
+      delivered = true;
+      return [{ id: "1-0", payload: { buildId: "build-1" } }];
+    },
+    renewLease: async (_queue: string, _consumer: string, id: string) => {
+      renewals.push(id);
+      return true;
+    },
+    ack: async (_queue: string, id: string) => acknowledgements.push(id),
+  } as unknown as RedisQueue;
+  const runtime = new RedisWorkerRuntime({
+    queue: fakeQueue,
+    queueName: "builds",
+    workerId: "worker-1",
+    blockMs: 0,
+    leaseRenewalMs: 2,
+  });
+  await runtime.run(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 8));
+    runtime.stop();
+  });
+  assert.ok(renewals.length > 0);
+  assert.deepEqual(acknowledgements, ["1-0"]);
+});
 test("submission requires hashed artifacts and usage is immutable", async () => {
-  const submissions = new SubmissionService();
+  const unconfigured = new SubmissionService();
+  await assert.rejects(
+    () =>
+      unconfigured.submit({
+        projectId: "p",
+        organizationId: "o",
+        platform: "android",
+        artifact: { hash: "abc" },
+      }),
+    (error: unknown) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "SUBMISSION_PROVIDER_REQUIRED",
+  );
+  const submissions = new SubmissionService(new MockSubmissionProvider());
   const job = await submissions.submit({
     projectId: "p",
     organizationId: "o",
@@ -461,6 +535,34 @@ test("submission requires hashed artifacts and usage is immutable", async () => 
       })
     ).status,
     "processing",
+  );
+});
+test("generic store providers never report success without a transport", async () => {
+  await assert.rejects(
+    () =>
+      new GooglePlayProvider().submit({
+        platform: "android",
+        applicationId: "com.example",
+        track: "internal",
+        artifact: { hash: "x" },
+      }),
+    (error: unknown) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "SUBMISSION_TRANSPORT_REQUIRED",
+  );
+  await assert.rejects(
+    () =>
+      new AppStoreConnectProvider().submit({
+        platform: "ios",
+        bundleIdentifier: "com.example",
+        ascAppId: "1",
+        artifact: { hash: "x" },
+      }),
+    (error: unknown) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "SUBMISSION_TRANSPORT_REQUIRED",
   );
 });
 test("real store providers upload signed artifacts through official flows", async () => {
@@ -572,6 +674,20 @@ test("queue leases recover and dead-letter after retry limit", () => {
   queue.recoverExpired(Date.now() + 31_000);
   assert.equal(queue.get(item.id).status, "dead");
 });
+test("queue retries become leasable only after their backoff", () => {
+  const queue = new LeaseQueue<{ buildId: string }>();
+  const item = queue.enqueue(
+    { buildId: "b" },
+    {
+      availableAt: 1_000,
+      maxAttempts: 2,
+    },
+  );
+  queue.lease("worker", 1_000);
+  queue.fail(item.id, "worker", 1_000);
+  assert.equal(queue.lease("worker", 2_000), null);
+  assert.equal(queue.lease("worker", 3_001)?.id, item.id);
+});
 test("vault encrypts secrets and inspection is redacted", () => {
   const vault = new SecretVault("test-master-key");
   const safe = vault.put({
@@ -583,6 +699,21 @@ test("vault encrypts secrets and inspection is redacted", () => {
   assert.equal(vault.read(safe.id), "do-not-log");
   assert.equal(safe.redacted, true);
   assert.equal(JSON.stringify(safe).includes("do-not-log"), false);
+});
+test("vault persists encrypted records and rejects invalid binary keys", () => {
+  const vault = new SecretVault("stable-master-key");
+  const safe = vault.put({
+    organizationId: "o",
+    name: "apns",
+    value: "private-key",
+  });
+  const restored = new SecretVault("stable-master-key");
+  restored.restore(vault.snapshot());
+  assert.equal(restored.read(safe.id), "private-key");
+  assert.equal(redact(undefined), "undefined");
+  assert.throws(() => new SecretVault(Buffer.alloc(31)), {
+    code: "SECRET_MASTER_KEY",
+  });
 });
 test("tenant directory applies role and project ownership rules", () => {
   const tenants = new TenantDirectory();
@@ -789,6 +920,15 @@ test("storage policy protects R2 presigned URL semantics and backups verify inte
   assert.deepEqual(restoreBackup(backup), { projects: [{ id: "p" }] });
   assert.throws(() => restoreBackup({ ...backup, hash: "bad" }), {
     code: "BACKUP_INVALID",
+  });
+});
+test("file storage validates content-addressed reads and rejects traversal", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lynxship-storage-"));
+  const storage = new FileStorage(root);
+  const artifact = await storage.put(Buffer.from("immutable"));
+  assert.deepEqual(await storage.get(artifact.hash), Buffer.from("immutable"));
+  assert.throws(() => storage.get("../escape"), {
+    code: "STORAGE_HASH_INVALID",
   });
 });
 test("source manifests are deterministic and ignore credentials/build outputs", async () => {

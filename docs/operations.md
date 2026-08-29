@@ -27,6 +27,12 @@ Revoke the credential, rotate the dependent secret, inspect audit/delivery logs,
 
 The local JSON state is for development. The production Docker overlay uses PostgreSQL for control-plane state, Redis with append-only persistence for queued build IDs, and Cloudflare R2 for signed artifacts. Configure R2 through `lynxship storage configure`; the CLI verifies the bucket, uploads artifacts directly, and emits time-limited download URLs. Render `compose.production.yaml` with `.env.production`, verify `/ready` before accepting traffic, then exercise a create/restart/read smoke test after every image or schema change. A production operator must still document database/object-store backup, restore, encryption-key recovery, TLS termination, token rotation and upgrade/rollback procedures before declaring the deployment Stable.
 
+The production credential vault also requires `LYNXSHIP_CREDENTIAL_MASTER_KEY`
+outside the repository. It encrypts provider secrets with AES-256-GCM and
+persists only ciphertext in the control-plane state. Losing this key makes the
+encrypted records unrecoverable, so it must be backed up through the same
+protected secret-management process as the database backup.
+
 API tokens are persisted in the durable control-plane state and may be created
 or revoked through `/v1/tokens`. The token value is returned only by the create
 response; subsequent list responses contain metadata without the secret. Use

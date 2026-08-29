@@ -1,0 +1,7 @@
+{
+  name: "@lynxship/permissions",
+  version: "0.1.0",
+  description: "Permission bridge for Lynx applications.",
+  main: "Index.ets",
+  license: "MIT",
+}

@@ -919,6 +919,10 @@ git diff --check
 git status --short --ignored
 ```
 
+The architecture gate also checks every public package for explicit publishing
+metadata, an entry point, a README and root contract coverage. New packages
+must satisfy that check before they can pass `pnpm check` or `pnpm verify`.
+
 Never commit credentials, service-account JSON files, App Store Connect
 private keys, keystores, passwords, secret **.env** files, **.lynxship/**,
 generated artifacts, personal SDK paths or presigned R2 URLs.
@@ -984,6 +988,7 @@ packages/create-app           Standalone create-lynxship-app generator
 packages/expo                 Expo LynxView/config-plugin integration
 packages/realtime             Optional Lynx real-time client and banners
 packages/notifications        Optional push registration/provider adapters
+packages/i18n                  Locale primitives, i18next and ReactLynx adapters
 packages/api                  Fastify control-plane API
 packages/dashboard            React/TanStack/Tailwind dashboard
 packages/sdk-android          Android OTA client
@@ -991,6 +996,7 @@ packages/sdk-ios              iOS OTA client
 packages/*                    Contracts, storage, queue, signing and workers
 examples/lynx-android-demo    Real LynxJS Android integration
 examples/lynx-react-tailwind-demo ReactLynx/Tailwind styling and asset fixture
+examples/lynx-i18n-demo         ReactLynx/i18next/Intl real-bundle fixture
 examples/lynx-basic-template Minimal LynxJS smoke-test template
 examples/lynx-octane-fixture  Octane Lynx validation notes
 examples/miso-lynx-fixture    Miso/Nix validation notes

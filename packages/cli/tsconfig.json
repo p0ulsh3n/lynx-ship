@@ -10,6 +10,7 @@
   "include": ["src"],
   "references": [
     { "path": "../build-orchestrator" },
+    { "path": "../i18n" },
     { "path": "../contracts" },
     { "path": "../microhs" },
     { "path": "../plugin-api" },

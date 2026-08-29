@@ -30,7 +30,23 @@ static NSString *const LynxShipAPNsTokenDidChange =
 }
 
 - (BOOL)requestPermission {
-  return NO;
+  __block UNAuthorizationStatus status = UNAuthorizationStatusNotDetermined;
+  dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+  [[UNUserNotificationCenter currentNotificationCenter]
+      getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings *settings) {
+    status = settings.authorizationStatus;
+    dispatch_semaphore_signal(semaphore);
+  }];
+  // The generated synchronous bridge cannot present a permission prompt. It
+  // can still report the already-known state without ever blocking the main
+  // thread, which is the only safe behavior for a synchronous API.
+  if ([NSThread isMainThread] ||
+      dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 250 * NSEC_PER_MSEC)) != 0) {
+    return NO;
+  }
+  return status == UNAuthorizationStatusAuthorized ||
+      status == UNAuthorizationStatusProvisional ||
+      status == UNAuthorizationStatusEphemeral;
 }
 
 - (void)requestPermissionAsync:(id)callbackValue {

@@ -34,9 +34,18 @@ import {
 } from "./client/core.js";
 import { parseRealtimeEnvelope } from "./client/protocol.js";
 import { reconnectDelay, shouldReconnect } from "./client/reconnect.js";
+import { serializeControlFrame } from "./client/control.js";
+import { sendRealtimeSerialized } from "./client/transport.js";
+import { resolveRealtimeToken } from "./client/auth.js";
+import {
+  emitRealtimeError,
+  invokeRealtimeCallback,
+} from "./client/callbacks.js";
 
 export * from "./client/core.js";
 
+// Intentional facade exception: this public client owns one socket lifecycle
+// state machine. Protocol parsing and retry policy remain in client/* modules.
 export class RealtimeClient {
   private readonly options: Required<
     Pick<
@@ -154,21 +163,28 @@ export class RealtimeClient {
       }
       this.socket = socket;
       socket.onopen = () => {
-        void this.handleOpen();
+        if (this.socket !== socket) return;
+        void this.handleOpen(socket);
       };
       socket.onmessage = (event) => {
+        if (this.socket !== socket) return;
         this.handleMessage(event);
       };
       socket.onerror = () => {
-        this.emitError(
+        if (this.socket !== socket) return;
+        emitRealtimeError(
+          this.options.onError,
           new RealtimeError("SOCKET_ERROR", "Realtime socket error"),
         );
       };
       socket.onclose = (event) => {
+        if (this.socket !== socket) return;
         this.handleClose(event);
       };
       this.connectionTimer = setTimeout(() => {
-        this.emitError(
+        if (this.socket !== socket) return;
+        emitRealtimeError(
+          this.options.onError,
           new RealtimeError(
             "CONNECTION_TIMEOUT",
             "Realtime connection timed out",
@@ -218,21 +234,24 @@ export class RealtimeClient {
         "Realtime message exceeds the configured size limit",
       );
     if (this.state === "open" && this.authenticated)
-      this.sendSerialized(serialized);
+      sendRealtimeSerialized(this.socket, this.state, serialized);
     else this.enqueue({ serialized, bytes });
     return id;
   }
 
-  private async handleOpen(): Promise<void> {
+  private async handleOpen(socket: RealtimeSocket): Promise<void> {
+    if (this.socket !== socket) return;
     this.clearTimer("connection");
     this.reconnectAttempt = 0;
     this.setState("open");
     try {
-      const token = await this.resolveToken();
-      if (this.manuallyClosed) return;
+      const token = await resolveRealtimeToken(this.options);
+      if (this.manuallyClosed || this.socket !== socket) return;
       this.sendControl(CONTROL_AUTH, { token });
       this.connectionTimer = setTimeout(() => {
-        this.emitError(
+        if (this.socket !== socket) return;
+        emitRealtimeError(
+          this.options.onError,
           new RealtimeError(
             "AUTHENTICATION_FAILED",
             "Realtime authentication timed out",
@@ -241,7 +260,8 @@ export class RealtimeClient {
         this.closeSocket(4003, "Authentication timeout");
       }, this.options.connectionTimeoutMs);
     } catch (error) {
-      this.emitError(
+      emitRealtimeError(
+        this.options.onError,
         error instanceof RealtimeError
           ? error
           : new RealtimeError(
@@ -277,7 +297,8 @@ export class RealtimeClient {
         this.handleAuthenticated();
         return;
       case CONTROL_AUTH_ERROR:
-        this.emitError(
+        emitRealtimeError(
+          this.options.onError,
           new RealtimeError(
             "AUTHENTICATION_FAILED",
             "Realtime server rejected authentication",
@@ -290,7 +311,8 @@ export class RealtimeClient {
           try {
             this.sendControl(CONTROL_PONG, { clientTime: this.now() });
           } catch (error) {
-            this.emitError(
+            emitRealtimeError(
+              this.options.onError,
               error instanceof RealtimeError
                 ? error
                 : new RealtimeError(
@@ -323,8 +345,18 @@ export class RealtimeClient {
           this.protocolFailure("Application message type is invalid", error);
           return;
         }
-        this.options.onMessage?.(envelope);
-        for (const listener of this.messageListeners) listener(envelope);
+        if (this.options.onMessage)
+          invokeRealtimeCallback(
+            () => this.options.onMessage!(envelope),
+            "onMessage",
+            this.options.onError,
+          );
+        for (const listener of this.messageListeners)
+          invokeRealtimeCallback(
+            () => listener(envelope),
+            "subscribe",
+            this.options.onError,
+          );
     }
   }
 
@@ -333,7 +365,12 @@ export class RealtimeClient {
     this.authenticated = true;
     this.setState("open");
     this.startHeartbeat();
-    this.options.onReady?.();
+    if (this.options.onReady)
+      invokeRealtimeCallback(
+        this.options.onReady,
+        "onReady",
+        this.options.onError,
+      );
     this.flushQueue();
   }
 
@@ -351,7 +388,8 @@ export class RealtimeClient {
     this.socket = null;
     this.authenticated = false;
     this.setState("closed");
-    this.emitError(
+    emitRealtimeError(
+      this.options.onError,
       error instanceof RealtimeError
         ? error
         : new RealtimeError("SOCKET_ERROR", "Realtime connection failed", {
@@ -367,55 +405,21 @@ export class RealtimeClient {
     );
   }
 
-  private async resolveToken(): Promise<string | null> {
-    if (this.options.allowAnonymous && this.options.token === undefined)
-      return null;
-    if (this.options.token === undefined)
-      throw new RealtimeError(
-        "AUTHENTICATION_REQUIRED",
-        "Realtime authentication token is missing",
-      );
-    const token =
-      typeof this.options.token === "function"
-        ? await this.options.token()
-        : this.options.token;
-    if (!token || token.length > 4096)
-      throw new RealtimeError(
-        "AUTHENTICATION_REQUIRED",
-        "Realtime authentication token is invalid",
-      );
-    return token;
-  }
-
   private sendControl(type: string, payload: JsonValue): void {
-    const envelope: RealtimeEnvelope = {
-      v: REALTIME_PROTOCOL_VERSION,
+    const frame = serializeControlFrame({
       type,
-      id: `${newId(this.options.now ?? Date.now, this.options.random ?? defaultRandom)}-${this.messageSequence++}`,
-      ts: this.now(),
       payload,
-    };
-    const serialized = JSON.stringify(envelope);
-    if (utf8ByteLength(serialized) > this.options.maxMessageBytes) {
+      now: () => this.now(),
+      random: this.options.random,
+      sequence: this.messageSequence,
+      maxBytes: this.options.maxMessageBytes,
+    });
+    if (!frame) {
       this.protocolFailure("Control frame exceeds the configured size limit");
       return;
     }
-    this.sendSerialized(serialized);
-  }
-
-  private sendSerialized(serialized: string): void {
-    if (!this.socket || this.state !== "open") {
-      throw new RealtimeError("SOCKET_ERROR", "Realtime socket is not open");
-    }
-    try {
-      this.socket.send(serialized);
-    } catch (error) {
-      throw new RealtimeError(
-        "SOCKET_ERROR",
-        "Realtime message could not be sent",
-        { cause: error },
-      );
-    }
+    this.messageSequence = frame.nextSequence;
+    sendRealtimeSerialized(this.socket, this.state, frame.serialized);
   }
 
   private enqueue(message: QueuedMessage): void {
@@ -439,10 +443,11 @@ export class RealtimeClient {
         const message = this.queue.shift();
         if (!message) break;
         this.queuedBytes -= message.bytes;
-        this.sendSerialized(message.serialized);
+        sendRealtimeSerialized(this.socket, this.state, message.serialized);
       }
     } catch (error) {
-      this.emitError(
+      emitRealtimeError(
+        this.options.onError,
         error instanceof RealtimeError
           ? error
           : new RealtimeError(
@@ -462,7 +467,8 @@ export class RealtimeClient {
       try {
         this.sendControl(CONTROL_PING, { clientTime: this.now() });
       } catch (error) {
-        this.emitError(
+        emitRealtimeError(
+          this.options.onError,
           error instanceof RealtimeError
             ? error
             : new RealtimeError(
@@ -475,7 +481,8 @@ export class RealtimeClient {
         return;
       }
       this.heartbeatTimeoutTimer = setTimeout(() => {
-        this.emitError(
+        emitRealtimeError(
+          this.options.onError,
           new RealtimeError(
             "HEARTBEAT_TIMEOUT",
             "Realtime heartbeat timed out",
@@ -495,7 +502,8 @@ export class RealtimeClient {
   }
 
   private protocolFailure(message: string, cause?: unknown): void {
-    this.emitError(
+    emitRealtimeError(
+      this.options.onError,
       new RealtimeError(
         "PROTOCOL_ERROR",
         message,
@@ -528,11 +536,12 @@ export class RealtimeClient {
 
   private setState(state: RealtimeState): void {
     this.state = state;
-    this.options.onStateChange?.(state);
-  }
-
-  private emitError(error: RealtimeError): void {
-    this.options.onError?.(error);
+    if (this.options.onStateChange)
+      invokeRealtimeCallback(
+        () => this.options.onStateChange!(state),
+        "onStateChange",
+        this.options.onError,
+      );
   }
 
   private now(): number {

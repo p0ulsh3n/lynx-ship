@@ -1,0 +1,11 @@
+{
+  "title": "LynxShip i18n",
+  "description": "A real ReactLynx fixture with explicit language state.",
+  "language": "Language: {{locale}}",
+  "items_one": "{{count}} item",
+  "items_other": "{{count}} items",
+  "items_zero": "no items",
+  "items_two": "{{count}} items",
+  "items_few": "{{count}} items",
+  "items_many": "{{count}} items"
+}

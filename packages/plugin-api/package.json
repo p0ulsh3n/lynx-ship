@@ -4,6 +4,11 @@
   "description": "Stable, declarative plugin contracts for LynxShip projects.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/plugin-api"
+  },
   "files": [
     "dist",
     "README.md"

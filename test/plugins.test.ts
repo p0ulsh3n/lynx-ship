@@ -8,6 +8,21 @@ import {
   inspectProjectPlugins,
 } from "../packages/cli/src/plugins.js";
 import { validateConfig } from "../packages/cli/src/config.js";
+import {
+  defineLynxShipPlugin,
+  LYNXSHIP_PLUGIN_API_VERSION,
+} from "@lynxship/plugin-api";
+
+test("plugin-api validates a public plugin definition", () => {
+  const plugin = defineLynxShipPlugin({
+    apiVersion: LYNXSHIP_PLUGIN_API_VERSION,
+    name: "@example/plugin-api-fixture",
+    capabilities: ["config"],
+    permissions: ["config:write"],
+    apply: () => ({ config: { enabled: true } }),
+  });
+  assert.equal(plugin.name, "@example/plugin-api-fixture");
+});
 
 async function writePlugin(
   root: string,

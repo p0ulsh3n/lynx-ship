@@ -5,17 +5,24 @@ import UserNotifications
 /// Downloads a validated profile image before iOS presents a rich alert.
 /// Add this file to a Notification Service Extension target, not the app target.
 final class LynxShipNotificationService: UNNotificationServiceExtension {
+  private let completionLock = NSLock()
   private var contentHandler: ((UNNotificationContent) -> Void)?
   private var bestAttemptContent: UNMutableNotificationContent?
   private var task: URLSessionDataTask?
+  private var didComplete = false
 
   override func didReceive(
     _ request: UNNotificationRequest,
     withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
   ) {
+    completionLock.lock()
     self.contentHandler = contentHandler
+    bestAttemptContent = nil
+    didComplete = false
+    completionLock.unlock()
+
     guard let content = request.content.mutableCopy() as? UNMutableNotificationContent else {
-      contentHandler(request.content)
+      complete(request.content)
       return
     }
     bestAttemptContent = content
@@ -23,7 +30,7 @@ final class LynxShipNotificationService: UNNotificationServiceExtension {
       let rawURL = content.userInfo["lynxship.image-url"] as? String,
       let url = secureImageURL(rawURL)
     else {
-      contentHandler(content)
+      complete(content)
       return
     }
 
@@ -46,9 +53,9 @@ final class LynxShipNotificationService: UNNotificationServiceExtension {
           identifier: "lynxship-profile-image",
           url: fileURL,
           options: nil
-        )
+      )
       else {
-        self.contentHandler?(self.bestAttemptContent ?? content)
+        self.complete(self.fallbackContent(content))
         return
       }
       self.bestAttemptContent?.attachments = [attachment]
@@ -59,9 +66,7 @@ final class LynxShipNotificationService: UNNotificationServiceExtension {
 
   override func serviceExtensionTimeWillExpire() {
     task?.cancel()
-    if let contentHandler, let bestAttemptContent {
-      contentHandler(bestAttemptContent)
-    }
+    complete(fallbackContent(nil))
   }
 
   private func secureImageURL(_ value: String) -> URL? {
@@ -97,7 +102,7 @@ final class LynxShipNotificationService: UNNotificationServiceExtension {
       !conversationID.isEmpty,
       let image = INImage(imageData: imageData)
     else {
-      contentHandler?(content)
+      complete(content)
       return
     }
 
@@ -128,7 +133,28 @@ final class LynxShipNotificationService: UNNotificationServiceExtension {
     interaction.donate { [weak self] _ in
       guard let self else { return }
       let updated = (try? content.updating(from: intent)) ?? content
-      self.contentHandler?(updated)
+      self.complete(updated)
     }
+  }
+
+  private func fallbackContent(_ fallback: UNNotificationContent?) -> UNNotificationContent {
+    completionLock.lock()
+    defer { completionLock.unlock() }
+    return bestAttemptContent ?? fallback ?? UNMutableNotificationContent()
+  }
+
+  /// Calls Apple's completion handler exactly once, including timeout races.
+  private func complete(_ content: UNNotificationContent) {
+    completionLock.lock()
+    if didComplete {
+      completionLock.unlock()
+      return
+    }
+    didComplete = true
+    let handler = contentHandler
+    contentHandler = nil
+    task = nil
+    completionLock.unlock()
+    handler?(content)
   }
 }

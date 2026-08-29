@@ -1,0 +1,11 @@
+{
+  module: {
+    name: "lynxship_media",
+    type: "har",
+    deviceTypes: ["default"],
+    requestPermissions: [
+      { name: "ohos.permission.MICROPHONE" },
+      { name: "ohos.permission.CAMERA" },
+    ],
+  },
+}

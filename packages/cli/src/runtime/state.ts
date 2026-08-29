@@ -1,8 +1,11 @@
 import { createSigningKey, type SigningKey } from "@lynxship/signing";
 import type { BuildJob, Platform, SubmissionJob } from "@lynxship/contracts";
 import { JsonRepository } from "@lynxship/db";
-import { BuildOrchestrator } from "@lynxship/build-orchestrator";
-import { SubmissionService } from "@lynxship/submit";
+import {
+  BuildOrchestrator,
+  LocalBuildExecutor,
+} from "@lynxship/build-orchestrator";
+import { MockSubmissionProvider, SubmissionService } from "@lynxship/submit";
 import type { RemoteCliState } from "../remote.js";
 import { join } from "node:path";
 
@@ -56,10 +59,10 @@ export async function loadState(root: string): Promise<LoadedCliState> {
   state.releases ??= [];
   state.signingKey ??= createSigningKey();
 
-  const builds = new BuildOrchestrator();
-  for (const job of state.builds) builds.jobs.set(job.id, job);
-  const submissions = new SubmissionService();
-  for (const job of state.submissions) submissions.jobs.set(job.id, job);
+  const builds = new BuildOrchestrator(new LocalBuildExecutor());
+  builds.restore(state.builds);
+  const submissions = new SubmissionService(new MockSubmissionProvider());
+  submissions.restore(state.submissions);
   return { state, repository, builds, submissions };
 }
 

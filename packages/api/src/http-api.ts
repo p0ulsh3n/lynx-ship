@@ -12,6 +12,7 @@ import {
   requiredScope,
 } from "./http-auth.js";
 import { FixedWindowRateLimiter } from "./services.js";
+import { renderPrometheusMetrics } from "./services/metrics.js";
 import { registerApiRoutes } from "./routes.js";
 
 async function storeBuildArtifact(
@@ -61,9 +62,7 @@ export function createApi(options: ApiOptions = {}): FastifyInstance {
     options.artifactRoot ?? join(process.cwd(), ".lynxship", "objects"),
   );
   const auth = options.tokenManager ?? app.auth;
-  const allowLocalBuildExecutor =
-    options.allowLocalBuildExecutor ??
-    (!runtime || process.env.NODE_ENV !== "production");
+  const allowLocalBuildExecutor = options.allowLocalBuildExecutor ?? !runtime;
   const server = Fastify({
     logger: options.logger ?? false,
     bodyLimit: 100 * 1024 * 1024,
@@ -196,19 +195,9 @@ export function createApi(options: ApiOptions = {}): FastifyInstance {
   });
   server.get("/health", async () => ({ status: "ok" }));
   server.get("/metrics", async (_request, reply) => {
-    const lines = Object.entries(app.metrics.snapshot()).map(([key, value]) => {
-      const [name, ...labels] = key.split("|");
-      const renderedLabels = labels
-        .map((label) => {
-          const [labelName, labelValue] = label.split("=");
-          return `${labelName}="${labelValue?.replaceAll('"', '\\"')}"`;
-        })
-        .join(",");
-      return `lynxship_${name}${renderedLabels ? `{${renderedLabels}}` : ""} ${value}`;
-    });
     return reply
       .type("text/plain; version=0.0.4; charset=utf-8")
-      .send(`${lines.join("\n")}\n`);
+      .send(renderPrometheusMetrics(app.metrics.snapshot()));
   });
   server.get("/ready", async (_request, reply) => {
     const checks = runtime

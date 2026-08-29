@@ -1,0 +1,7 @@
+{
+  module: {
+    name: "lynxship_permissions",
+    type: "har",
+    deviceTypes: ["default"],
+  },
+}

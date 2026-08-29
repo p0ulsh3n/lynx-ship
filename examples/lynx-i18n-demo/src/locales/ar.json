@@ -1,0 +1,11 @@
+{
+  "title": "تدويل LynxShip",
+  "description": "اختبار ReactLynx حقيقي مع حالة لغة واضحة.",
+  "language": "اللغة: {{locale}}",
+  "items_zero": "لا عناصر",
+  "items_one": "عنصر واحد",
+  "items_two": "عنصران",
+  "items_few": "{{count}} عناصر",
+  "items_many": "{{count}} عنصر",
+  "items_other": "{{count}} عنصر"
+}

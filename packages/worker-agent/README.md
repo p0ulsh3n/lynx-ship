@@ -3,7 +3,8 @@
 Shared worker registry and Redis Streams runtime for platform build agents.
 
 `RedisWorkerRuntime` implements an at-least-once loop with consumer-group
-acknowledgements and recovery of abandoned messages. It intentionally does not
+acknowledgements, periodic lease renewal for long-running handlers and recovery
+of abandoned messages. It intentionally does not
 execute project commands: Android and iOS workers must provide handlers inside
 their own isolated Linux/macOS environments and must make result publication
 idempotent by build ID.

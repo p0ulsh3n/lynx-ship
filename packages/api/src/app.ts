@@ -13,8 +13,12 @@ import {
   createSigningKey,
   type SigningKey,
 } from "@lynxship/signing";
-import { BuildService } from "@lynxship/build-orchestrator";
-import { SubmissionService } from "@lynxship/submit";
+import {
+  BuildService,
+  LocalBuildExecutor,
+  type BuildExecutor,
+} from "@lynxship/build-orchestrator";
+import { MockSubmissionProvider, SubmissionService } from "@lynxship/submit";
 import { WorkerRegistry } from "@lynxship/worker-agent";
 import {
   assert,
@@ -40,11 +44,13 @@ import {
   ManagedProviderCatalog,
   Metrics,
   SecretVault,
+  type SecretRecord,
   TelemetryStore,
   TenantDirectory,
   UsageLedger,
   WebhookService,
 } from "./services.js";
+import { snapshotApp } from "./persistence.js";
 
 export interface RuntimeBackends {
   database: "json" | "postgres";
@@ -85,16 +91,27 @@ export interface LynxShipApp {
 export function createApp(
   runtime?: RuntimeBackends,
   auth = new TokenManager(),
+  buildExecutor?: BuildExecutor,
 ): LynxShipApp {
   return {
     auth,
-    builds: new BuildService(),
+    builds: new BuildService(
+      buildExecutor ?? (runtime ? undefined : new LocalBuildExecutor()),
+    ),
     ota: new OtaService(),
-    submissions: new SubmissionService(),
+    // A local in-memory app is intentionally convenient for tests and demos.
+    // Persistent/runtime-backed apps receive no implicit mock provider.
+    submissions: new SubmissionService(
+      runtime ? undefined : new MockSubmissionProvider(),
+    ),
     workers: new WorkerRegistry(),
     usage: new UsageLedger(),
     queue: new LeaseQueue<BuildJob>(),
-    vault: new SecretVault(),
+    vault: new SecretVault(
+      process.env.NODE_ENV === "production"
+        ? requiredEnv("LYNXSHIP_CREDENTIAL_MASTER_KEY")
+        : (envValue("LYNXSHIP_CREDENTIAL_MASTER_KEY") ?? undefined),
+    ),
     tenants: new TenantDirectory(),
     telemetry: new TelemetryStore(),
     webhooks: new WebhookService(),
@@ -114,6 +131,9 @@ export interface PersistentAppState {
   channels: Channel[];
   submissions: SubmissionJob[];
   submissionKeys: Array<[string, string]>;
+  credentials: SecretRecord[];
+  /** Compatibility field for local state and pre-vault migrations. */
+  signingKeyCredentialId?: string | null;
   workers: Worker[];
   usage: UsageRecord[];
   organizations: Organization[];
@@ -134,6 +154,8 @@ const emptyState: PersistentAppState = {
   channels: [],
   submissions: [],
   submissionKeys: [],
+  credentials: [],
+  signingKeyCredentialId: null,
   workers: [],
   usage: [],
   organizations: [],
@@ -276,30 +298,58 @@ async function createRuntime(root: string): Promise<RuntimeBackends> {
   };
 }
 
-export async function loadPersistentApp(root: string): Promise<{
+export async function loadPersistentApp(
+  root: string,
+  options: { buildExecutor?: BuildExecutor } = {},
+): Promise<{
   app: LynxShipApp;
   save: () => Promise<PersistentAppState>;
   runtime: RuntimeBackends;
 }> {
   const runtime = await createRuntime(root);
   const state = await runtime.state.read();
-  state.signingKey ??= createSigningKey();
-  const app = createApp(runtime, new TokenManager(state.tokens ?? []));
+  const app = createApp(
+    runtime,
+    new TokenManager(state.tokens ?? []),
+    options.buildExecutor,
+  );
 
-  for (const job of state.builds ?? []) app.builds.jobs.set(job.id, job);
+  app.vault.restore(state.credentials ?? []);
+  let signingKey = state.signingKey;
+  if (process.env.NODE_ENV === "production") {
+    if (state.signingKeyCredentialId) {
+      signingKey = JSON.parse(
+        app.vault.read(state.signingKeyCredentialId),
+      ) as SigningKey;
+    }
+    if (!signingKey) {
+      signingKey = createSigningKey();
+      const stored = app.vault.put({
+        organizationId: "system",
+        name: "ota-signing-key",
+        type: "ota-signing-key",
+        value: JSON.stringify(signingKey),
+      });
+      state.signingKeyCredentialId = stored.id;
+    }
+    // Never write the private signing key back into the durable state record.
+    state.signingKey = null;
+  } else {
+    signingKey ??= createSigningKey();
+    state.signingKey = signingKey;
+  }
 
-  app.ota = new OtaService(state.signingKey);
+  app.builds.restore(state.builds ?? []);
+
+  app.ota = new OtaService(signingKey);
   for (const release of state.releases ?? [])
     app.ota.releases.set(release.id, release);
   for (const channel of state.channels ?? [])
     app.ota.channels.set(`${channel.projectId}:${channel.name}`, channel);
 
-  for (const job of state.submissions ?? [])
-    app.submissions.jobs.set(job.id, job);
-  app.submissions.idempotency = new Map(state.submissionKeys ?? []);
+  app.submissions.restore(state.submissions ?? [], state.submissionKeys ?? []);
 
-  for (const worker of state.workers ?? [])
-    app.workers.workers.set(worker.id, worker);
+  app.workers.restore(state.workers ?? []);
   app.usage.records = state.usage ?? [];
 
   for (const organization of state.organizations ?? [])
@@ -322,30 +372,4 @@ export async function loadPersistentApp(root: string): Promise<{
   const save = () => runtime.state.write(snapshotApp(app, state));
   await save();
   return { app, save, runtime };
-}
-
-function snapshotApp(
-  app: LynxShipApp,
-  state: PersistentAppState,
-): PersistentAppState {
-  return {
-    ...state,
-    tokens: app.auth.snapshot(),
-    signingKey: app.ota.signingKey,
-    builds: app.builds.list(),
-    releases: [...app.ota.releases.values()],
-    channels: [...app.ota.channels.values()],
-    submissions: app.submissions.list(),
-    submissionKeys: [...app.submissions.idempotency.entries()],
-    workers: app.workers.list(),
-    usage: app.usage.list(),
-    organizations: [...app.tenants.organizations.values()],
-    projects: [...app.tenants.projects.values()],
-    memberships: [...app.tenants.memberships.values()],
-    auditEvents: app.audit.events,
-    telemetryEvents: app.telemetry.events,
-    webhookEndpoints: [...app.webhooks.endpoints.values()],
-    webhookDeliveries: app.webhooks.deliveries,
-    metrics: app.metrics.snapshot(),
-  };
 }

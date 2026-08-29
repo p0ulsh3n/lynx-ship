@@ -1,0 +1,15 @@
+plugins { id "com.android.library" }
+
+def lynxVersion = project.findProperty("LYNXSHIP_LYNX_VERSION") ?: "latest.release"
+
+android {
+    namespace "com.lynxship.permissions"
+    compileSdk 35
+    defaultConfig { minSdk 24; consumerProguardFiles "consumer-rules.pro" }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+dependencies {
+    implementation "org.lynxsdk.lynx:lynx:${lynxVersion}"
+    implementation "androidx.annotation:annotation:1.10.0"
+}

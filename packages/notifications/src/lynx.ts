@@ -121,18 +121,25 @@ export async function registerLynxPushNotifications(
   });
   const status = await client.register();
   let subscription: PushTokenChangeSubscription | undefined;
-  if (status === "registered" && nativeModule.subscribeTokenChanges) {
-    const nativeSubscription = nativeModule.subscribeTokenChanges((token) => {
-      void client.registerToken(token).catch((error: unknown) => {
-        options.onTokenChangeError?.(error);
+  if (
+    (status === "registered" || status === "unavailable") &&
+    nativeModule.subscribeTokenChanges
+  ) {
+    try {
+      const nativeSubscription = nativeModule.subscribeTokenChanges((token) => {
+        void client.registerToken(token).catch((error: unknown) => {
+          options.onTokenChangeError?.(error);
+        });
       });
-    });
-    subscription = {
-      remove: () => {
-        nativeSubscription?.remove?.();
-        nativeModule.clearTokenChangeListeners?.();
-      },
-    };
+      subscription = {
+        remove: () => {
+          nativeSubscription?.remove?.();
+          nativeModule.clearTokenChangeListeners?.();
+        },
+      };
+    } catch (error) {
+      options.onTokenChangeError?.(error);
+    }
   }
   return {
     status,

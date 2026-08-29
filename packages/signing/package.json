@@ -4,6 +4,11 @@
   "description": "Signing and verification primitives for LynxShip OTA manifests.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/signing"
+  },
   "files": [
     "dist"
   ],

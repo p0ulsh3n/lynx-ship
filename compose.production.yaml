@@ -13,6 +13,7 @@ services:
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?Set the least-privilege R2 access key}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?Set the R2 secret access key}
       R2_BUCKET: ${R2_BUCKET:?Set the R2 bucket name}
+      LYNXSHIP_CREDENTIAL_MASTER_KEY: ${LYNXSHIP_CREDENTIAL_MASTER_KEY:?Set a stable vault key}
       LYNXSHIP_RATE_LIMIT: ${LYNXSHIP_RATE_LIMIT:-120}
     restart: unless-stopped
     stop_grace_period: 30s

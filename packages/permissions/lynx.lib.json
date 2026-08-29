@@ -1,0 +1,13 @@
+{
+  "platforms": {
+    "android": {
+      "packageName": "com.lynxship.permissions",
+      "sourceDir": "android"
+    },
+    "ios": {
+      "sourceDir": "ios",
+      "podspecPath": "ios/lynxship-permissions.podspec"
+    },
+    "harmony": { "packageDir": "harmony" }
+  }
+}

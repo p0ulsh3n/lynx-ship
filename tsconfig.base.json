@@ -48,12 +48,30 @@
       "@lynxship/notifications/lynx": ["./packages/notifications/src/lynx.ts"],
       "@lynxship/expo": ["./packages/expo/src/index.ts"],
       "@lynxship/plugin-api": ["./packages/plugin-api/src/index.ts"],
+      "@lynxship/lynx-library-tools": [
+        "./packages/lynx-library-tools/src/index.ts"
+      ],
+      "@lynxship/asset-pipeline": ["./packages/asset-pipeline/src/index.ts"],
+      "@lynxship/test-kit": ["./packages/test-kit/src/index.ts"],
+      "@lynxship/i18n": ["./packages/i18n/src/index.ts"],
+      "@lynxship/i18n/i18next": ["./packages/i18n/src/i18next/index.ts"],
+      "@lynxship/i18n/react-lynx": ["./packages/i18n/src/react-lynx/index.ts"],
+      "@lynxship/permissions": ["./packages/permissions/src/index.ts"],
+      "@lynxship/router": ["./packages/router/src/index.ts"],
+      "@lynxship/device-storage": ["./packages/device-storage/src/index.ts"],
+      "@lynxship/observability": ["./packages/observability/src/index.ts"],
+      "@lynxship/ui-tokens": ["./packages/ui-tokens/src/index.ts"],
+      "@lynxship/tailwind-lynx": ["./packages/tailwind-lynx/src/index.ts"],
+      "@lynxship/lynxtron": ["./packages/lynxtron/src/index.ts"],
+      "@lynxship/media": ["./packages/media/src/index.ts"],
       "@lynxship/db": ["./packages/db/src/index.ts"],
       "@lynxship/queue": ["./packages/queue/src/index.ts"],
       "@lynxship/signing": ["./packages/signing/src/index.ts"],
       "@lynxship/storage": ["./packages/storage/src/index.ts"],
       "@lynxship/submit": ["./packages/submit/src/index.ts"],
-      "@lynxship/worker-agent": ["./packages/worker-agent/src/index.ts"]
+      "@lynxship/worker-agent": ["./packages/worker-agent/src/index.ts"],
+      "@lynxship/worker-android": ["./packages/worker-android/src/index.ts"],
+      "@lynxship/worker-ios": ["./packages/worker-ios/src/index.ts"]
     }
   }
 }

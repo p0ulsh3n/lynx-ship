@@ -4,23 +4,18 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
 /**
  * Small, dependency-light OTA client for a Lynx Android host.
@@ -28,6 +23,10 @@ import java.util.Properties;
  * The client never activates a downloaded release before its manifest,
  * signature, path, size and SHA-256 hash have all been checked. The host
  * renders the active bundle through TemplateProvider#openActiveAsset.
+ *
+ * The public class remains a compatibility facade for the OTA lifecycle;
+ * release validation, serialization and state persistence live in the
+ * package-private helpers beside it.
  */
 public final class LynxShipOtaClient {
     public interface EmbeddedAssetProvider {
@@ -221,7 +220,7 @@ public final class LynxShipOtaClient {
     private final File activeDirectory;
     private final File candidateDirectory;
     private final File lastKnownGoodDirectory;
-    private final File stateFile;
+    private final OtaStateStore stateStore;
     private final Object lock = new Object();
 
     public LynxShipOtaClient(Config config) throws IOException {
@@ -232,7 +231,7 @@ public final class LynxShipOtaClient {
         this.activeDirectory = new File(config.storageDirectory, "active");
         this.candidateDirectory = new File(config.storageDirectory, "candidate");
         this.lastKnownGoodDirectory = new File(config.storageDirectory, "last-known-good");
-        this.stateFile = new File(config.storageDirectory, "state.properties");
+        this.stateStore = new OtaStateStore(new File(config.storageDirectory, "state.properties"));
         recoverInterruptedActivation();
     }
 
@@ -258,7 +257,7 @@ public final class LynxShipOtaClient {
             int status = connection.getResponseCode();
             if (status == HttpURLConnection.HTTP_NOT_FOUND || status == HttpURLConnection.HTTP_NO_CONTENT) return null;
             if (status != HttpURLConnection.HTTP_OK) throw new IOException("OTA check failed with HTTP " + status);
-            String body = readText(connection.getInputStream(), 1_000_000);
+            String body = OtaFiles.readText(connection.getInputStream(), 1_000_000);
             if (body.trim().equals("null")) return null;
             return Release.parse(new JSONObject(body));
         } finally {
@@ -271,7 +270,7 @@ public final class LynxShipOtaClient {
             OtaSecurity.validateRelease(config, release);
             if (release.manifest.sequence <= activeSequence()) return false;
             File temporary = new File(config.storageDirectory, "download-" + release.manifest.sequence + ".tmp");
-            deleteRecursively(temporary);
+            OtaFiles.deleteRecursively(temporary);
             if (!temporary.mkdirs()) throw new IOException("Could not create OTA download directory");
             try {
                 long total = 0;
@@ -279,16 +278,16 @@ public final class LynxShipOtaClient {
                     total += downloadAsset(asset, temporary);
                     if (total > config.maxReleaseBytes) throw new IOException("OTA release exceeds size limit");
                 }
-                writeText(new File(temporary, "release.json"), OtaSerialization.releaseJson(release));
-                deleteRecursively(candidateDirectory);
+                OtaFiles.writeText(new File(temporary, "release.json"), OtaSerialization.releaseJson(release));
+                OtaFiles.deleteRecursively(candidateDirectory);
                 if (!temporary.renameTo(candidateDirectory)) throw new IOException("Could not stage OTA candidate atomically");
-                setState("candidateSequence", Long.toString(release.manifest.sequence));
-                setState("candidateId", release.id);
-                setState("candidatePending", "true");
-                saveState();
+                stateStore.set("candidateSequence", Long.toString(release.manifest.sequence));
+                stateStore.set("candidateId", release.id);
+                stateStore.set("candidatePending", "true");
+                stateStore.save();
                 return true;
             } catch (Exception error) {
-                deleteRecursively(temporary);
+                OtaFiles.deleteRecursively(temporary);
                 throw error;
             }
         }
@@ -297,25 +296,25 @@ public final class LynxShipOtaClient {
     public void activateCandidate() throws IOException {
         synchronized (lock) {
             if (!candidateDirectory.exists()) return;
-            deleteRecursively(lastKnownGoodDirectory);
+            OtaFiles.deleteRecursively(lastKnownGoodDirectory);
             if (activeDirectory.exists() && !activeDirectory.renameTo(lastKnownGoodDirectory)) {
                 throw new IOException("Could not preserve the last-known-good OTA release");
             }
             if (!candidateDirectory.renameTo(activeDirectory)) throw new IOException("Could not activate OTA candidate");
-            setState("activeSequence", Long.toString(getStateLong("candidateSequence", 0)));
-            setState("activeId", getState("candidateId", ""));
-            setState("candidatePending", "false");
-            setState("failedLaunches", "0");
-            saveState();
+            stateStore.set("activeSequence", Long.toString(stateStore.getLong("candidateSequence", 0)));
+            stateStore.set("activeId", stateStore.get("candidateId", ""));
+            stateStore.set("candidatePending", "false");
+            stateStore.set("failedLaunches", "0");
+            stateStore.save();
         }
     }
 
     public void beginLaunch() throws IOException {
         synchronized (lock) {
             if (!activeDirectory.exists() || activeSequence() == lastKnownGoodSequence()) return;
-            long failures = getStateLong("failedLaunches", 0) + 1;
-            setState("failedLaunches", Long.toString(failures));
-            saveState();
+            long failures = stateStore.getLong("failedLaunches", 0) + 1;
+            stateStore.set("failedLaunches", Long.toString(failures));
+            stateStore.save();
             if (failures >= config.maxConsecutiveFailures) rollbackToLastKnownGood();
         }
     }
@@ -323,12 +322,12 @@ public final class LynxShipOtaClient {
     public void markLaunchSuccess() throws IOException {
         synchronized (lock) {
             if (!activeDirectory.exists()) return;
-            deleteRecursively(lastKnownGoodDirectory);
-            copyDirectory(activeDirectory, lastKnownGoodDirectory);
-            setState("lastGoodSequence", Long.toString(activeSequence()));
-            setState("lastGoodId", getState("activeId", "embedded"));
-            setState("failedLaunches", "0");
-            saveState();
+            OtaFiles.deleteRecursively(lastKnownGoodDirectory);
+            OtaFiles.copyDirectory(activeDirectory, lastKnownGoodDirectory);
+            stateStore.set("lastGoodSequence", Long.toString(activeSequence()));
+            stateStore.set("lastGoodId", stateStore.get("activeId", "embedded"));
+            stateStore.set("failedLaunches", "0");
+            stateStore.save();
         }
     }
 
@@ -336,13 +335,13 @@ public final class LynxShipOtaClient {
         if (!OtaSecurity.isSafePath(path)) throw new IOException("Unsafe OTA asset path");
         synchronized (lock) {
             File active = new File(activeDirectory, path);
-            if (active.isFile()) return readBytes(active, config.maxReleaseBytes);
+            if (active.isFile()) return OtaFiles.readBytes(active, config.maxReleaseBytes);
         }
         return config.embeddedAssets.read(path);
     }
 
     public long activeSequence() {
-        return getStateLong("activeSequence", 0);
+        return stateStore.getLong("activeSequence", 0);
     }
 
     private long downloadAsset(Asset asset, File directory) throws Exception {
@@ -368,7 +367,7 @@ public final class LynxShipOtaClient {
                     output.write(buffer, 0, read);
                 }
             }
-            if (count != asset.size || !hex(digest.digest()).equals(asset.hash)) throw new SecurityException("OTA asset integrity check failed for " + asset.path);
+            if (count != asset.size || !OtaFiles.hex(digest.digest()).equals(asset.hash)) throw new SecurityException("OTA asset integrity check failed for " + asset.path);
             return count;
         } finally {
             connection.disconnect();
@@ -377,19 +376,19 @@ public final class LynxShipOtaClient {
 
     private void recoverInterruptedActivation() throws IOException {
         synchronized (lock) {
-            if (getState("candidatePending", "false").equals("true") && candidateDirectory.exists()) activateCandidate();
-            if (getStateLong("failedLaunches", 0) >= config.maxConsecutiveFailures) rollbackToLastKnownGood();
+            if (stateStore.get("candidatePending", "false").equals("true") && candidateDirectory.exists()) activateCandidate();
+            if (stateStore.getLong("failedLaunches", 0) >= config.maxConsecutiveFailures) rollbackToLastKnownGood();
         }
     }
 
     private void rollbackToLastKnownGood() throws IOException {
         if (!lastKnownGoodDirectory.exists()) return;
-        deleteRecursively(activeDirectory);
+        OtaFiles.deleteRecursively(activeDirectory);
         if (!lastKnownGoodDirectory.renameTo(activeDirectory)) throw new IOException("Could not rollback OTA release");
-        setState("activeSequence", getState("lastGoodSequence", "0"));
-        setState("activeId", getState("lastGoodId", "embedded"));
-        setState("failedLaunches", "0");
-        saveState();
+        stateStore.set("activeSequence", stateStore.get("lastGoodSequence", "0"));
+        stateStore.set("activeId", stateStore.get("lastGoodId", "embedded"));
+        stateStore.set("failedLaunches", "0");
+        stateStore.save();
     }
 
     private HttpURLConnection open(URL url) throws IOException {
@@ -416,115 +415,8 @@ public final class LynxShipOtaClient {
         }
     }
 
-    private static String readText(InputStream input, long maxBytes) throws IOException {
-        return new String(readBytes(input, maxBytes), StandardCharsets.UTF_8);
-    }
-
-    private static byte[] readBytes(InputStream input, long maxBytes) throws IOException {
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        byte[] buffer = new byte[16 * 1024];
-        int read;
-        long count = 0;
-        while ((read = input.read(buffer)) != -1) {
-            count += read;
-            if (count > maxBytes) throw new IOException("OTA response exceeds size limit");
-            output.write(buffer, 0, read);
-        }
-        return output.toByteArray();
-    }
-
-    private static byte[] readBytes(File file, long maxBytes) throws IOException {
-        try (InputStream input = new FileInputStream(file)) {
-            return readBytes(input, maxBytes);
-        }
-    }
-
-    private static void writeText(File file, String value) throws IOException {
-        File temporary = new File(file.getParentFile(), file.getName() + ".tmp");
-        try (BufferedOutputStream output = new BufferedOutputStream(new FileOutputStream(temporary))) {
-            output.write(value.getBytes(StandardCharsets.UTF_8));
-        }
-        if (file.exists() && !file.delete()) throw new IOException("Could not replace OTA state file");
-        if (!temporary.renameTo(file)) throw new IOException("Could not commit OTA state file");
-    }
-
-    private static void copyDirectory(File source, File target) throws IOException {
-        if (!source.isDirectory()) return;
-        if (!target.mkdirs() && !target.isDirectory()) throw new IOException("Could not create OTA backup");
-        File[] children = source.listFiles();
-        if (children == null) return;
-        for (File child : children) {
-            File destination = new File(target, child.getName());
-            if (child.isDirectory()) copyDirectory(child, destination);
-            else writeFile(destination, readBytes(child, 100L * 1024L * 1024L));
-        }
-    }
-
-    private static void writeFile(File file, byte[] value) throws IOException {
-        File parent = file.getParentFile();
-        if (parent != null && !parent.exists() && !parent.mkdirs()) throw new IOException("Could not create OTA directory");
-        try (FileOutputStream output = new FileOutputStream(file)) {
-            output.write(value);
-        }
-    }
-
-    private Properties readState() {
-        Properties values = new Properties();
-        if (!stateFile.isFile()) return values;
-        try (InputStream input = new FileInputStream(stateFile)) {
-            values.load(input);
-        } catch (Exception ignored) {
-            // A corrupt state must never prevent the embedded bundle from starting.
-        }
-        return values;
-    }
-
-    private String getState(String name, String fallback) {
-        return readState().getProperty(name, fallback);
-    }
-
-    private long getStateLong(String name, long fallback) {
-        try {
-            return Long.parseLong(getState(name, Long.toString(fallback)));
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
-    }
-
     private long lastKnownGoodSequence() {
-        return getStateLong("lastGoodSequence", 0);
+        return stateStore.getLong("lastGoodSequence", 0);
     }
 
-    private void setState(String name, String value) {
-        // State is committed as one file by saveState().
-        state.put(name, value);
-    }
-
-    private final Properties state = new Properties();
-
-    private void saveState() throws IOException {
-        Properties values = readState();
-        values.putAll(state);
-        File temporary = new File(stateFile.getParentFile(), stateFile.getName() + ".tmp");
-        try (FileOutputStream output = new FileOutputStream(temporary)) {
-            values.store(output, "LynxShip OTA state");
-        }
-        if (stateFile.exists() && !stateFile.delete()) throw new IOException("Could not replace OTA state");
-        if (!temporary.renameTo(stateFile)) throw new IOException("Could not commit OTA state");
-        state.clear();
-        state.putAll(values);
-    }
-
-    private static void deleteRecursively(File file) throws IOException {
-        if (!file.exists()) return;
-        File[] children = file.listFiles();
-        if (children != null) for (File child : children) deleteRecursively(child);
-        if (!file.delete()) throw new IOException("Could not remove OTA temporary data");
-    }
-
-    private static String hex(byte[] bytes) {
-        StringBuilder result = new StringBuilder(bytes.length * 2);
-        for (byte value : bytes) result.append(String.format("%02x", value & 0xff));
-        return result.toString();
-    }
 }

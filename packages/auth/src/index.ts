@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   assert,
   createId,
@@ -28,6 +28,30 @@ const roleScopes: Record<Role, Set<string>> = {
 };
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+
+const validExpiry = (value: string | null | undefined): string | null => {
+  if (value === undefined || value === null) return null;
+  const timestamp = Date.parse(value);
+  assert(
+    Number.isFinite(timestamp) && timestamp > Date.now(),
+    "TOKEN_EXPIRY",
+    "Token expiration must be a valid future date",
+  );
+  return new Date(timestamp).toISOString();
+};
+
+const equalDigest = (left: string, right: string): boolean => {
+  const leftBytes = Uint8Array.from(
+    Buffer.from(left, "hex"),
+  ) as Uint8Array<ArrayBuffer>;
+  const rightBytes = Uint8Array.from(
+    Buffer.from(right, "hex"),
+  ) as Uint8Array<ArrayBuffer>;
+  return (
+    leftBytes.length === rightBytes.length &&
+    timingSafeEqual(leftBytes, rightBytes)
+  );
+};
 
 export interface TokenRecord {
   id: string;
@@ -100,7 +124,7 @@ export class TokenManager {
       projectId: input.projectId ?? null,
       scopes,
       hash: digest(value),
-      expiresAt: input.expiresAt ?? null,
+      expiresAt: validExpiry(input.expiresAt),
       revokedAt: null,
       lastUsedAt: null,
     });
@@ -146,9 +170,10 @@ export class TokenManager {
       projectId?: string;
     } = {},
   ) {
-    const token = [...this.tokens.values()].find(
-      (candidate) => candidate.hash === digest(value),
-    );
+    const valueDigest = digest(value);
+    let token: TokenRecord | undefined;
+    for (const candidate of this.tokens.values())
+      if (!token && equalDigest(candidate.hash, valueDigest)) token = candidate;
     assert(token, "AUTH_INVALID", "Invalid service token");
     assert(!token.revokedAt, "AUTH_REVOKED", "Service token has been revoked");
     assert(

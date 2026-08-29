@@ -21,6 +21,19 @@ export interface RedisConsumeOptions {
   blockMs?: number;
 }
 
+const assertIntegerRange = (
+  value: number,
+  min: number,
+  max: number,
+  code: string,
+  message: string,
+) =>
+  assert(
+    Number.isInteger(value) && value >= min && value <= max,
+    code,
+    message,
+  );
+
 export class LeaseQueue<T = unknown> {
   readonly jobs: QueueItem<T>[] = [];
 
@@ -28,12 +41,26 @@ export class LeaseQueue<T = unknown> {
     payload: T,
     options: { availableAt?: number; maxAttempts?: number } = {},
   ) {
+    const availableAt = options.availableAt ?? Date.now();
+    assert(
+      Number.isFinite(availableAt),
+      "QUEUE_TIME",
+      "availableAt must be finite",
+    );
+    const maxAttempts = options.maxAttempts ?? 3;
+    assertIntegerRange(
+      maxAttempts,
+      1,
+      100,
+      "QUEUE_ATTEMPTS",
+      "maxAttempts must be an integer between 1 and 100",
+    );
     const item: QueueItem<T> = {
       id: createId("q"),
       payload,
       status: "queued",
-      availableAt: options.availableAt ?? Date.now(),
-      maxAttempts: options.maxAttempts ?? 3,
+      availableAt,
+      maxAttempts,
       attempts: 0,
       lease: null,
     };
@@ -42,9 +69,11 @@ export class LeaseQueue<T = unknown> {
   }
 
   lease(workerId: string, now = Date.now()) {
+    assert(workerId.length > 0, "QUEUE_WORKER", "Worker id is required");
     const item = this.jobs.find(
       (candidate) =>
-        candidate.status === "queued" && candidate.availableAt <= now,
+        (candidate.status === "queued" || candidate.status === "retry") &&
+        candidate.availableAt <= now,
     );
     if (!item) return null;
     item.status = "leased";
@@ -184,6 +213,20 @@ export class RedisQueue {
     );
     const count = String(options.count ?? 1);
     const blockMs = String(options.blockMs ?? 5000);
+    assertIntegerRange(
+      options.count ?? 1,
+      1,
+      1000,
+      "QUEUE_COUNT",
+      "Redis consume count must be an integer between 1 and 1000",
+    );
+    assertIntegerRange(
+      options.blockMs ?? 5000,
+      0,
+      60_000,
+      "QUEUE_BLOCK",
+      "Redis block time must be an integer between 0 and 60000 milliseconds",
+    );
     const response = (await this.client.sendCommand([
       "XREADGROUP",
       "GROUP",
@@ -212,6 +255,13 @@ export class RedisQueue {
       "QUEUE_IDLE_TIME",
       "Minimum idle time must be a non-negative integer",
     );
+    assertIntegerRange(
+      count,
+      1,
+      1000,
+      "QUEUE_RECLAIM_COUNT",
+      "Redis reclaim count must be an integer between 1 and 1000",
+    );
     const response = (await this.client.sendCommand([
       "XAUTOCLAIM",
       key,
@@ -223,6 +273,35 @@ export class RedisQueue {
       String(count),
     ])) as unknown;
     return parseAutoClaimMessages<T>(response);
+  }
+
+  /** Refresh ownership of an in-flight message without acknowledging it. */
+  async renewLease(
+    queue: string,
+    consumer: string,
+    id: string,
+  ): Promise<boolean> {
+    const key = await this.ensureGroup(queue);
+    assert(
+      /^[a-zA-Z0-9._:-]+$/.test(consumer),
+      "QUEUE_CONSUMER",
+      "Consumer name contains unsupported characters",
+    );
+    assert(
+      /^[0-9]+-[0-9]+$/.test(id),
+      "QUEUE_MESSAGE_ID",
+      "Redis stream message id is invalid",
+    );
+    const response = (await this.client.sendCommand([
+      "XCLAIM",
+      key,
+      this.group,
+      consumer,
+      "0",
+      id,
+      "JUSTID",
+    ])) as unknown;
+    return Array.isArray(response) && response.length > 0;
   }
 
   async ack(queue: string, id: string): Promise<void> {

@@ -1,6 +1,7 @@
 import {
   assert,
   createId,
+  LynxShipError,
   type Platform,
   type SubmissionJob,
 } from "@lynxship/contracts";
@@ -31,20 +32,36 @@ export interface ProviderSubmissionInput {
   ascAppId?: string;
 }
 
+type StoreTransport = (
+  input: Record<string, unknown>,
+) => Promise<{ remoteId: string; status: string }>;
+
+async function unconfiguredStoreTransport(): Promise<never> {
+  throw new LynxShipError(
+    "SUBMISSION_TRANSPORT_REQUIRED",
+    "Configure the real store transport before submitting",
+  );
+}
+
 export class MockSubmissionProvider implements SubmissionProvider {
   async submit(job: SubmissionJob) {
     return { remoteId: `mock_${job.id}`, status: "submitted" };
   }
 }
 
+/** Prevents a server or production caller from silently accepting a fake job. */
+export class UnconfiguredSubmissionProvider implements SubmissionProvider {
+  async submit(_job: SubmissionJob): Promise<never> {
+    throw new LynxShipError(
+      "SUBMISSION_PROVIDER_REQUIRED",
+      "Configure a real store provider or use an explicit local mock",
+    );
+  }
+}
+
 export class GooglePlayProvider implements SubmissionProvider {
   constructor(
-    readonly transport: (
-      input: Record<string, unknown>,
-    ) => Promise<{ remoteId: string; status: string }> = async () => ({
-      status: "accepted",
-      remoteId: "sandbox-google",
-    }),
+    readonly transport: StoreTransport = unconfiguredStoreTransport,
   ) {}
 
   async submit(job: ProviderSubmissionInput) {
@@ -68,12 +85,7 @@ export class GooglePlayProvider implements SubmissionProvider {
 
 export class AppStoreConnectProvider implements SubmissionProvider {
   constructor(
-    readonly transport: (
-      input: Record<string, unknown>,
-    ) => Promise<{ remoteId: string; status: string }> = async () => ({
-      status: "processing",
-      remoteId: "sandbox-asc",
-    }),
+    readonly transport: StoreTransport = unconfiguredStoreTransport,
   ) {}
 
   async submit(job: ProviderSubmissionInput) {
@@ -98,13 +110,31 @@ export class AppStoreConnectProvider implements SubmissionProvider {
 }
 
 export class SubmissionService {
-  readonly jobs = new Map<string, SubmissionJob>();
+  private readonly jobStore = new Map<string, SubmissionJob>();
 
-  idempotency = new Map<string, string>();
+  private readonly idempotencyStore = new Map<string, string>();
 
   constructor(
-    readonly provider: SubmissionProvider = new MockSubmissionProvider(),
+    readonly provider: SubmissionProvider = new UnconfiguredSubmissionProvider(),
   ) {}
+
+  get jobs(): ReadonlyMap<string, SubmissionJob> {
+    return new Map(this.jobStore);
+  }
+
+  get idempotency(): ReadonlyMap<string, string> {
+    return new Map(this.idempotencyStore);
+  }
+
+  restore(
+    jobs: readonly SubmissionJob[],
+    idempotency: readonly (readonly [string, string])[] = [],
+  ): void {
+    this.jobStore.clear();
+    this.idempotencyStore.clear();
+    for (const job of jobs) this.jobStore.set(job.id, job);
+    for (const [key, id] of idempotency) this.idempotencyStore.set(key, id);
+  }
 
   async submit(input: SubmissionInput): Promise<SubmissionJob> {
     const {
@@ -130,8 +160,8 @@ export class SubmissionService {
       "SUBMISSION_SOURCE",
       "Exactly one external artifact source may be selected",
     );
-    if (idempotencyKey && this.idempotency.has(idempotencyKey))
-      return this.get(this.idempotency.get(idempotencyKey)!);
+    if (idempotencyKey && this.idempotencyStore.has(idempotencyKey))
+      return this.get(this.idempotencyStore.get(idempotencyKey)!);
     const job: SubmissionJob = {
       id: createId("sub"),
       projectId,
@@ -151,20 +181,20 @@ export class SubmissionService {
       status: "queued",
       createdAt: new Date().toISOString(),
     };
-    this.jobs.set(job.id, job);
-    if (idempotencyKey) this.idempotency.set(idempotencyKey, job.id);
+    this.jobStore.set(job.id, job);
+    if (idempotencyKey) this.idempotencyStore.set(idempotencyKey, job.id);
     Object.assign(job, await this.provider.submit(job));
     return job;
   }
 
   get(id: string): SubmissionJob {
-    const job = this.jobs.get(id);
+    const job = this.jobStore.get(id);
     assert(job, "SUBMISSION_NOT_FOUND", "Submission not found");
     return job;
   }
 
   list(): SubmissionJob[] {
-    return [...this.jobs.values()];
+    return [...this.jobStore.values()];
   }
 }
 

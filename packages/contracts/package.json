@@ -4,6 +4,11 @@
   "description": "Shared LynxShip contracts, identifiers, hashing and validation helpers.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/contracts"
+  },
   "files": [
     "dist"
   ],

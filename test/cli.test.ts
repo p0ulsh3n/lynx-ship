@@ -25,6 +25,80 @@ import {
   findLockfile,
   findProjectRoot,
 } from "../packages/cli/src/runtime/project.js";
+import { inspectEcosystem } from "../packages/cli/src/ecosystem.js";
+import { packageManagerInstallCommand } from "../packages/cli/src/process-runner.js";
+import {
+  createI18nSetupPlan,
+  entryImportPath,
+  renderPolyfillSource,
+} from "../packages/cli/src/i18n/plan.js";
+
+test("ecosystem inspection is read-only and reports first-party packages", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-ecosystem-"));
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({ dependencies: { "@lynxship/i18n": "0.1.0" } }),
+  );
+  const packages = await inspectEcosystem(cwd);
+  assert.equal(
+    packages.find((item) => item.name === "@lynxship/i18n")?.installed,
+    true,
+  );
+  assert.equal(
+    packages.find((item) => item.name === "@lynxship/media")?.installed,
+    false,
+  );
+});
+
+test("i18n setup plans compatible polyfills, dependencies and entry wiring", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-i18n-setup-"));
+  await mkdir(join(cwd, "src", "locales"), { recursive: true });
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({
+      name: "i18n-setup",
+      dependencies: { "@lynxship/i18n": "0.1.0" },
+    }),
+  );
+  await writeFile(
+    join(cwd, "src", "index.tsx"),
+    "import { App } from './App';\n",
+  );
+  await writeFile(join(cwd, "src", "locales", "en.json"), "{}\n");
+  await writeFile(join(cwd, "src", "locales", "fr.json"), "{}\n");
+
+  const plan = await createI18nSetupPlan({
+    root: cwd,
+    persistence: true,
+  });
+  assert.equal(plan.entryFile, "src/index.tsx");
+  assert.deepEqual(plan.locales, ["en", "fr"]);
+  assert.deepEqual(plan.capabilities, [
+    "getCanonicalLocales",
+    "Locale",
+    "PluralRules",
+  ]);
+  assert.ok(plan.packages.includes("i18next@^26.0.0"));
+  assert.ok(plan.packages.includes("@lynxship/device-storage"));
+  assert.ok(
+    renderPolyfillSource(plan).includes(
+      "@formatjs/intl-getcanonicallocales/polyfill-force.js",
+    ),
+  );
+  assert.equal(entryImportPath(plan), "./lynxship/i18n-polyfills.js");
+});
+
+test("i18n dependency installation remains exact and follows the project manager", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "lynxship-package-manager-"));
+  await writeFile(
+    join(cwd, "package.json"),
+    JSON.stringify({ packageManager: "pnpm@11.19.0" }),
+  );
+  assert.deepEqual(packageManagerInstallCommand(cwd, ["i18next@^26.0.0"]), {
+    command: process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+    args: ["add", "--save-exact", "i18next@^26.0.0"],
+  });
+});
 
 test("CLI runtime helpers resolve flags and project boundaries deterministically", async () => {
   assert.equal(

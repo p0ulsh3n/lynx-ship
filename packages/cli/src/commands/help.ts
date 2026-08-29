@@ -15,6 +15,8 @@ Commands:
   plugin doctor            Validate plugin packages without modifying native files
   plugin apply             Apply project plugin native changes for a platform
   plugin apply --dry-run   Preview plugin native changes without writing files
+  ecosystem               Show first-party LynxShip package capabilities
+  i18n setup               Install and wire i18next, Intl polyfills and locale persistence
   autolink check          Check Lynx native-library Autolink wiring
   autolink codegen        Run the project's Native Module codegen script
   ota doctor              Check native OTA host integration
@@ -79,6 +81,13 @@ Device and diagnostics options:
   run --simulator         Install an iOS .app with simctl
   run --launch             Launch the installed iOS Simulator app after install
   logs --device <id>      Select the device or simulator for native logs
+
+i18n setup options:
+  --dry-run               Show planned dependencies/files without changing the project
+  --entry <path>          Explicit Lynx entry file when it cannot be detected
+  --intl auto|all|<list>  Detect Intl use, install only required polyfills, or choose explicitly
+  --locales <list>        Comma-separated locale codes for static FormatJS locale data
+  --no-persistence        Do not install the LynxShip device-storage bridge
 
 Global options:
   --json                  Emit one stable JSON result/error object

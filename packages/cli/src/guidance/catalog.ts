@@ -1,5 +1,7 @@
 import type { CliGuidance } from "./types.js";
 
+// Intentional declarative-catalog exception: keeping guidance keyed by stable
+// error code makes every CLI failure discoverable and machine-readable.
 export const guidance: Record<string, CliGuidance> = {
   CLI_PROJECT_REQUIRED: {
     commands: ["lynxship init", "lynxship doctor"],

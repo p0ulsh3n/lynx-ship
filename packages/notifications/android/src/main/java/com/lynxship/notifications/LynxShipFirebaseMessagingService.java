@@ -6,6 +6,8 @@ import com.google.firebase.messaging.FirebaseMessagingService;
 public final class LynxShipFirebaseMessagingService extends FirebaseMessagingService {
     @Override
     public void onNewToken(String token) {
-        LynxShipNotificationsModule.dispatchTokenChanged(token);
+        // This callback returns the send-to-device token used by FCM payloads.
+        // onRegistered is an FID callback and is not a replacement for it.
+        LynxShipNotificationsStore.saveToken(getApplicationContext(), token);
     }
 }

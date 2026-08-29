@@ -56,6 +56,11 @@ frame, never in the URL. It does not persist tokens or include them in error
 messages. The server must reject application frames until authentication is
 accepted.
 
+Application callbacks are isolated from the transport: if `onMessage`, a
+subscription listener, `onReady` or `onStateChange` throws, the socket keeps
+running and `onError` receives a `CALLBACK_ERROR`. An exception thrown by
+`onError` itself is swallowed so error reporting cannot take down the client.
+
 ## Optional typing and recording presence
 
 Use the optional presence facade for ephemeral conversation state. It sends one

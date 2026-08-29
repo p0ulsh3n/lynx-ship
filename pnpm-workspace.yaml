@@ -8,6 +8,7 @@ onlyBuiltDependencies:
   - esbuild
 allowBuilds:
   "@biomejs/biome": false
+  "@swc/core": true
   core-js: true
   electron: false
   electron-winstaller: false

@@ -266,6 +266,40 @@ export class PostgresPushTokenStore implements PushTokenStore {
     projectId: string;
   }): Promise<PushDestination[]> {
     await this.initialize();
+    const result = await this.pool.query<EncryptedPushDestination>(
+      `
+        SELECT
+          id,
+          user_id AS "userId",
+          organization_id AS "organizationId",
+          project_id AS "projectId",
+          platform,
+          app_id AS "appId",
+          environment,
+          token_hash AS "tokenHash",
+          iv,
+          tag,
+          ciphertext,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt",
+          last_success_at AS "lastSuccessAt",
+          disabled_at AS "disabledAt"
+        FROM lynxship_push_tokens
+        WHERE user_id = $1 AND organization_id = $2 AND project_id = $3
+          AND disabled_at IS NULL
+      `,
+      [input.userId, input.organizationId, input.projectId],
+    );
+    for (const [id, record] of this.local.records) {
+      if (
+        record.userId === input.userId &&
+        record.organizationId === input.organizationId &&
+        record.projectId === input.projectId
+      )
+        this.local.records.delete(id);
+    }
+    for (const record of result.rows)
+      this.local.records.set(record.id, normalizeEncryptedRecord(record));
     return this.local.listActive(input);
   }
 
@@ -346,16 +380,22 @@ export class PostgresPushTokenStore implements PushTokenStore {
     `);
     this.local.records.clear();
     for (const record of result.rows)
-      this.local.records.set(record.id, {
-        ...record,
-        createdAt: new Date(record.createdAt).toISOString(),
-        updatedAt: new Date(record.updatedAt).toISOString(),
-        lastSuccessAt: record.lastSuccessAt
-          ? new Date(record.lastSuccessAt).toISOString()
-          : null,
-        disabledAt: record.disabledAt
-          ? new Date(record.disabledAt).toISOString()
-          : null,
-      });
+      this.local.records.set(record.id, normalizeEncryptedRecord(record));
   }
+}
+
+function normalizeEncryptedRecord(
+  record: EncryptedPushDestination,
+): EncryptedPushDestination {
+  return {
+    ...record,
+    createdAt: new Date(record.createdAt).toISOString(),
+    updatedAt: new Date(record.updatedAt).toISOString(),
+    lastSuccessAt: record.lastSuccessAt
+      ? new Date(record.lastSuccessAt).toISOString()
+      : null,
+    disabledAt: record.disabledAt
+      ? new Date(record.disabledAt).toISOString()
+      : null,
+  };
 }

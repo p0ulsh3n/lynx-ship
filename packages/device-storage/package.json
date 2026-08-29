@@ -1,0 +1,52 @@
+{
+  "name": "@lynxship/device-storage",
+  "version": "0.1.0",
+  "description": "Async device-storage contract with explicit host adapters for Lynx applications.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/device-storage"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "android/build.gradle",
+    "android/consumer-rules.pro",
+    "android/src",
+    "ios/*.podspec",
+    "ios/*.h",
+    "ios/*.m",
+    "harmony/build-profile.json5",
+    "harmony/hvigorfile.ts",
+    "harmony/Index.ets",
+    "harmony/oh-package.json5",
+    "harmony/src",
+    "types",
+    "lynx.lib.json"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./types/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false",
+    "codegen": "lynx-autolink-codegen"
+  },
+  "devDependencies": {
+    "@lynx-js/autolink-codegen": "0.4.1"
+  }
+}

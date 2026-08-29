@@ -23,6 +23,9 @@ Current controls:
 - Tokens are hashed and scoped; role checks are centralized.
 - OTA manifests use canonical JSON and Ed25519 signatures. Native executable OTA is blocked.
 - Secret values are encrypted with AES-256-GCM in the local vault and are never returned by inspection.
+- Production OTA signing keys and provider secrets are persisted only as
+  ciphertext under the stable `LYNXSHIP_CREDENTIAL_MASTER_KEY`; the key itself
+  remains outside the database and repository.
 - Build jobs have explicit transitions, attempts and provider boundaries.
 - Content-addressed storage prevents accidental overwrite of an existing object.
 - Webhook signatures bind a timestamp and exact body.

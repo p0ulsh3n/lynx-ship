@@ -1,0 +1,56 @@
+{
+  "name": "@lynxship/i18n",
+  "version": "0.1.0",
+  "description": "Explicit, runtime-safe internationalization primitives for Lynx applications.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/i18n"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./i18next": {
+      "types": "./dist/i18next/index.d.ts",
+      "import": "./dist/i18next/index.js"
+    },
+    "./react-lynx": {
+      "types": "./dist/react-lynx/index.d.ts",
+      "import": "./dist/react-lynx/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@lynx-js/react": ">=0.125.0 <0.126.0",
+    "i18next": ">=26.0.0 <27.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@lynx-js/react": {
+      "optional": true
+    },
+    "i18next": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@lynx-js/react": "0.125.0",
+    "i18next": "26.4.0"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false"
+  }
+}

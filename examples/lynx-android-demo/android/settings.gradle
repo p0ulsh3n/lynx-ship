@@ -20,3 +20,11 @@ rootProject.name = "LynxShipAndroidDemo"
 include ":app"
 include ":lynxship-sdk-android"
 project(":lynxship-sdk-android").projectDir = file("../../../packages/sdk-android")
+include ":lynxship-device-storage"
+project(":lynxship-device-storage").projectDir = file("../../../packages/device-storage/android")
+include ":lynxship-permissions"
+project(":lynxship-permissions").projectDir = file("../../../packages/permissions/android")
+include ":lynxship-media"
+project(":lynxship-media").projectDir = file("../../../packages/media/android")
+include ":lynxship-notifications"
+project(":lynxship-notifications").projectDir = file("../../../packages/notifications/android")

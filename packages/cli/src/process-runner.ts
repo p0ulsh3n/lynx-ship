@@ -44,6 +44,25 @@ export function packageManagerScriptCommand(
   return { command: manager.command, args: ["run", script, ...args] };
 }
 
+export function packageManagerInstallCommand(
+  root: string,
+  packages: readonly string[],
+): { command: string; args: string[] } {
+  const manager = packageManagerCommand(root);
+  const normalized = manager.command
+    .split(/[\\/]/)
+    .at(-1)
+    ?.toLowerCase()
+    .replace(/\.(?:cmd|bat|exe)$/i, "");
+  const subcommand =
+    normalized === "yarn" || normalized === "pnpm" ? "add" : "install";
+  const exactFlag = normalized === "yarn" ? "--exact" : "--save-exact";
+  return {
+    command: manager.command,
+    args: [subcommand, exactFlag, ...packages],
+  };
+}
+
 function detectPackageManager(root: string): "pnpm" | "npm" | "yarn" {
   try {
     const packageJson = JSON.parse(

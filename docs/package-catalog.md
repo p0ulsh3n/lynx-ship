@@ -7,36 +7,48 @@ fixture and must not be published as an end-user SDK.
 
 ## Public packages
 
-| Package                        | Role                                                                                                                  | API documentation                                                         |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `@lynxship/cli`                | Terminal workflows for doctor, development, real native builds, artifacts, OTA and store submission.                  | [`packages/cli/README.md`](../packages/cli/README.md)                     |
-| `create-lynxship-app`          | Safe project generator delegating framework scaffolding to official templates.                                        | [`packages/create-app/README.md`](../packages/create-app/README.md)       |
-| `@lynxship/plugin-api`         | Versioned project-plugin contracts and permission boundaries.                                                         | [`packages/plugin-api/README.md`](../packages/plugin-api/README.md)       |
-| `@lynxship/expo`               | Expo config plugin and native module that embeds LynxView and synchronizes signed Lynx bundles/assets.                | [`packages/expo/README.md`](../packages/expo/README.md)                   |
-| `@lynxship/lynx-realtime`      | Secure bounded WebSocket client, presence, typing/recording activity, receipts and headless/in-app banner primitives. | [`packages/realtime/README.md`](../packages/realtime/README.md)           |
-| `@lynxship/notifications`      | Client registration plus optional Node server adapters for FCM, APNs and Huawei Push Kit.                             | [`packages/notifications/README.md`](../packages/notifications/README.md) |
-| `@lynxship/microhs`            | Verified MicroHs acquisition and adapter contract for experimental Miso workflows.                                    | [`packages/microhs/README.md`](../packages/microhs/README.md)             |
-| `@lynxship/sdk-android`        | Native Android OTA client for a Lynx host.                                                                            | [`packages/sdk-android/README.md`](../packages/sdk-android/README.md)     |
-| `@lynxship/sdk-ios`            | Native iOS OTA client for a Lynx host.                                                                                | [`packages/sdk-ios/README.md`](../packages/sdk-ios/README.md)             |
-| `@lynxship/contracts`          | Shared identifiers, DTOs, hashes and validation helpers.                                                              | Source-level contract; used by the CLI and services.                      |
-| `@lynxship/build-orchestrator` | Build state transitions and reproducibility primitives.                                                               | Source-level contract; not a hosted build service.                        |
-| `@lynxship/db`                 | JSON and PostgreSQL state repositories for the control plane.                                                         | Source-level contract; PostgreSQL is server-side only.                    |
-| `@lynxship/signing`            | Signing and verification primitives for OTA manifests.                                                                | Source-level contract; provider credentials remain external.              |
-| `@lynxship/submit`             | Google Play and App Store Connect submission contracts.                                                               | Source-level contract; live submission needs developer credentials.       |
+| Package                        | Role                                                                                                                                                                        | API documentation                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `@lynxship/cli`                | Terminal workflows for doctor, development, real native builds, artifacts, OTA and store submission.                                                                        | [`packages/cli/README.md`](../packages/cli/README.md)                               |
+| `create-lynxship-app`          | Safe project generator delegating framework scaffolding to official templates.                                                                                              | [`packages/create-app/README.md`](../packages/create-app/README.md)                 |
+| `@lynxship/plugin-api`         | Versioned project-plugin contracts and permission boundaries.                                                                                                               | [`packages/plugin-api/README.md`](../packages/plugin-api/README.md)                 |
+| `@lynxship/expo`               | Expo config plugin and native module that embeds LynxView and synchronizes signed Lynx bundles/assets.                                                                      | [`packages/expo/README.md`](../packages/expo/README.md)                             |
+| `@lynxship/lynx-realtime`      | Secure bounded WebSocket client, presence, typing/recording activity, receipts and headless/in-app banner primitives.                                                       | [`packages/realtime/README.md`](../packages/realtime/README.md)                     |
+| `@lynxship/notifications`      | Client registration plus optional Node server adapters for FCM, APNs and Huawei Push Kit.                                                                                   | [`packages/notifications/README.md`](../packages/notifications/README.md)           |
+| `@lynxship/microhs`            | Verified MicroHs acquisition and adapter contract for experimental Miso workflows.                                                                                          | [`packages/microhs/README.md`](../packages/microhs/README.md)                       |
+| `@lynxship/lynx-library-tools` | Lynx library metadata/manifest validation for Android, iOS, HarmonyOS, Lynxtron, macOS and Windows, plus official scaffold/codegen planning.                                | [`packages/lynx-library-tools/README.md`](../packages/lynx-library-tools/README.md) |
+| `@lynxship/asset-pipeline`     | Deterministic asset discovery, SHA-256 manifests and verified synchronization.                                                                                              | [`packages/asset-pipeline/README.md`](../packages/asset-pipeline/README.md)         |
+| `@lynxship/test-kit`           | Test-plan orchestration around declared project runners and official Lynx testing tools.                                                                                    | [`packages/test-kit/README.md`](../packages/test-kit/README.md)                     |
+| `@lynxship/permissions`        | Permission contracts requiring explicit Android/iOS/HarmonyOS host adapters.                                                                                                | [`packages/permissions/README.md`](../packages/permissions/README.md)               |
+| `@lynxship/router`             | Portable route matching, history and deep-link contracts.                                                                                                                   | [`packages/router/README.md`](../packages/router/README.md)                         |
+| `@lynxship/device-storage`     | Async typed storage facade; secure storage remains an explicit host adapter.                                                                                                | [`packages/device-storage/README.md`](../packages/device-storage/README.md)         |
+| `@lynxship/i18n`               | Portable locale resolution, i18next/ReactLynx adapters, resource-loader/cache contracts, targeted Intl capability planning, interpolation, plural fallback and RTL helpers. | [`packages/i18n/README.md`](../packages/i18n/README.md)                             |
+| `@lynxship/media`              | Capability-based camera, microphone and picker contracts with Android/iOS/HarmonyOS bridges and a pure Lynx adapter.                                                        | [`packages/media/README.md`](../packages/media/README.md)                           |
+| `@lynxship/observability`      | Opt-in bounded, redacted event buffering with explicit sinks.                                                                                                               | [`packages/observability/README.md`](../packages/observability/README.md)           |
+| `@lynxship/lynxtron`           | SHA-256-verified Desktop/Lynxtron artifact loading contracts.                                                                                                               | [`packages/lynxtron/README.md`](../packages/lynxtron/README.md)                     |
+| `@lynxship/tailwind-lynx`      | Validation/planning around the official Tailwind ReactLynx preset.                                                                                                          | [`packages/tailwind-lynx/README.md`](../packages/tailwind-lynx/README.md)           |
+| `@lynxship/ui-tokens`          | Framework-neutral design-token validation and deterministic CSS output.                                                                                                     | [`packages/ui-tokens/README.md`](../packages/ui-tokens/README.md)                   |
+| `@lynxship/sdk-android`        | Native Android OTA client for a Lynx host.                                                                                                                                  | [`packages/sdk-android/README.md`](../packages/sdk-android/README.md)               |
+| `@lynxship/sdk-ios`            | Native iOS OTA client for a Lynx host.                                                                                                                                      | [`packages/sdk-ios/README.md`](../packages/sdk-ios/README.md)                       |
+| `@lynxship/contracts`          | Shared identifiers, DTOs, hashes and validation helpers.                                                                                                                    | Source-level contract; used by the CLI and services.                                |
+| `@lynxship/build-orchestrator` | Build state transitions and reproducibility primitives.                                                                                                                     | Source-level contract; not a hosted build service.                                  |
+| `@lynxship/db`                 | JSON and PostgreSQL state repositories for the control plane.                                                                                                               | Source-level contract; PostgreSQL is server-side only.                              |
+| `@lynxship/signing`            | Signing and verification primitives for OTA manifests.                                                                                                                      | Source-level contract; provider credentials remain external.                        |
+| `@lynxship/submit`             | Google Play and App Store Connect submission contracts.                                                                                                                     | Source-level contract; live submission needs developer credentials.                 |
 
 ## Private packages
 
-| Package                     | Role                                                                                 |
-| --------------------------- | ------------------------------------------------------------------------------------ |
-| `@lynxship/api`             | Fastify control-plane API.                                                           |
-| `@lynxship/auth`            | Internal tenant, token and authorization services.                                   |
-| `@lynxship/build-providers` | Internal provider adapters for local/self-hosted builds.                             |
-| `@lynxship/dashboard`       | Internal React/Vite operations dashboard.                                            |
-| `@lynxship/queue`           | Internal memory/Redis queue adapters.                                                |
-| `@lynxship/storage`         | Internal filesystem/R2 artifact adapters.                                            |
-| `@lynxship/worker-agent`    | Internal worker registration, leases and execution protocol.                         |
-| `@lynxship/worker-android`  | Android worker placeholder; isolated production fleet is not shipped by this repo.   |
-| `@lynxship/worker-ios`      | macOS/iOS worker placeholder; isolated production fleet is not shipped by this repo. |
+| Package                     | Role                                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `@lynxship/api`             | Fastify control-plane API.                                                                             |
+| `@lynxship/auth`            | Internal tenant, token and authorization services.                                                     |
+| `@lynxship/build-providers` | Internal provider adapters for local/self-hosted builds.                                               |
+| `@lynxship/dashboard`       | Internal React/Vite operations dashboard.                                                              |
+| `@lynxship/queue`           | Internal memory/Redis queue adapters.                                                                  |
+| `@lynxship/storage`         | Internal filesystem/R2 artifact adapters.                                                              |
+| `@lynxship/worker-agent`    | Internal worker registration, leases and execution protocol.                                           |
+| `@lynxship/worker-android`  | Internal Android executor with toolchain preflight, allow-listed Gradle tasks and hashed artifacts.    |
+| `@lynxship/worker-ios`      | Internal macOS/iOS executor with Xcode preflight, validated xcodebuild arguments and hashed artifacts. |
 
 ## Examples and validation
 

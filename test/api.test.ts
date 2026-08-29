@@ -4,10 +4,12 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TokenManager } from "@lynxship/auth";
+import { LocalBuildExecutor } from "@lynxship/build-orchestrator";
 import {
   createApi,
   loadPersistentApp,
   FixedWindowRateLimiter,
+  renderPrometheusMetrics,
 } from "@lynxship/api";
 import { sha256 } from "@lynxship/contracts";
 
@@ -50,6 +52,15 @@ test("Fastify API exposes health and build contract", async (t) => {
     url: `/v1/builds/${job.id}/run`,
   });
   assert.equal((run.json() as { state: string }).state, "success");
+});
+
+test("Prometheus rendering safely escapes labels and rejects malformed keys", () => {
+  const rendered = renderPrometheusMetrics({
+    'events_total|source=a\\b"c\n=d': 2,
+    "events_total|broken": 99,
+    "bad-name": 100,
+  });
+  assert.equal(rendered, 'lynxship_events_total{source="a\\\\b\\"c\\n=d"} 2\n');
 });
 
 test("Fastify auth enforces scopes while health remains public", async (t) => {
@@ -307,7 +318,8 @@ test("Fastify rate limiting returns 429 with a retry hint", async (t) => {
 
 test("persistent API state survives app reload", async () => {
   const root = await mkdtemp(join(tmpdir(), "lynxship-api-"));
-  const first = await loadPersistentApp(root);
+  const options = { buildExecutor: new LocalBuildExecutor() };
+  const first = await loadPersistentApp(root, options);
   const token = first.app.auth.create({
     name: "persistent-ci",
     organizationId: "o",
@@ -321,13 +333,35 @@ test("persistent API state survives app reload", async () => {
   });
   await first.app.builds.run(job.id);
   await first.save();
-  const second = await loadPersistentApp(root);
+  const second = await loadPersistentApp(root, options);
   assert.equal(second.app.builds.get(job.id).state, "success");
   assert.equal(
     second.app.auth.authenticate(token.value, { requiredScope: "project:read" })
       .name,
     "persistent-ci",
   );
+});
+
+test("persistent API does not use the deterministic local build executor", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lynxship-api-worker-"));
+  const persistent = await loadPersistentApp(root);
+  const job = await persistent.app.builds.create({
+    projectId: "p",
+    organizationId: "o",
+    platform: "android",
+    profile: "production",
+  });
+  try {
+    await assert.rejects(
+      () => persistent.app.builds.run(job.id),
+      (error: unknown) =>
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "BUILD_EXECUTOR_REQUIRED",
+    );
+  } finally {
+    await persistent.runtime.close();
+  }
 });
 
 test("organization and project resources are persisted through the API service", async () => {

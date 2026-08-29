@@ -25,6 +25,35 @@ npx @lynxship/cli@latest doctor --project-dir ./my-lynx-app
 
 The package exposes the `lynxship` executable.
 
+## Automatic i18n setup
+
+For a Lynx project using i18next, the CLI can perform the repeatable setup in
+one explicit, reviewable command:
+
+```bash
+npx @lynxship/cli@latest init
+npx @lynxship/cli@latest i18n setup --dry-run
+npx @lynxship/cli@latest i18n setup
+```
+
+The setup command detects the entry file and JSON locale catalog, installs
+`@lynxship/i18n`, a compatible i18next major, the LynxShip device-storage
+bridge and only the FormatJS polyfills needed by detected `Intl.*` usage. It
+generates `src/lynxship/i18n-polyfills.ts` with static imports in dependency
+order and adds one import to the detected entry file. Use `--intl all` when a
+library accesses Intl dynamically, `--locales en,fr,ar` to override locale
+discovery, or `--entry src/index.tsx` when the entry file is non-standard. The
+command fails rather than guessing an ambiguous entry file.
+
+The adapter restores the last resolved language automatically when the host
+exposes `LynxShipDeviceStorage` (Android, iOS or another linked Lynx host), or
+browser `localStorage` on Web. The lookup is local and best-effort; no network
+request is made and a missing host bridge does not prevent the app from
+starting. Projects with their own storage can inject the `persistence.storage`
+contract. `--no-persistence` skips installation of the device-storage bridge.
+Generated polyfills are static and recorded in the project lockfile: npm
+cannot be downloaded silently from an application bundle at runtime.
+
 ## Plugin ecosystem
 
 Install a community plugin as a normal project dependency, list it in

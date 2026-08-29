@@ -124,6 +124,8 @@ packages/submit/src/
 
 packages/sdk-android/src/main/java/com/lynxship/sdk/android/
 ├─ LynxShipOtaClient.java public Android OTA lifecycle and compatibility API
+├─ OtaStateStore.java     atomic OTA activation-state persistence
+├─ OtaFiles.java          bounded file and byte-stream operations
 ├─ OtaSecurity.java      HTTPS, path, manifest and Ed25519 verification
 └─ OtaSerialization.java deterministic staged-release serialization
 
@@ -160,13 +162,16 @@ past their current responsibility-specific limits. The line limits are
 guardrails, not a target; a future extraction should lower or remove the
 corresponding baseline.
 
-Four larger files are intentional and have explicit budgets: `guidance/catalog.ts`
+Several larger files are intentional and have explicit budgets: `guidance/catalog.ts`
 is declarative command data, `realtime/src/client.ts` is one connection state
 machine whose invariants depend on shared private state, the Android OTA class
-is the stable compatibility façade, and `commands/doctor.ts` assembles the
-cross-platform diagnostic report. Their protocol, validation, persistence and
-provider responsibilities are extracted into neighboring modules; any further
-growth is caught by the architecture check.
+is the stable compatibility façade while `OtaStateStore.java` owns its atomic
+state persistence, `commands/doctor.ts` assembles the
+cross-platform diagnostic report, and the notifications provider, payload and
+token-store modules keep one cohesive provider contract, payload schema or
+encrypted persistence boundary respectively. Their protocol, validation,
+persistence and provider responsibilities are extracted into neighboring
+modules; any further growth is caught by the architecture check.
 
 The runtime selects one adapter per boundary:
 

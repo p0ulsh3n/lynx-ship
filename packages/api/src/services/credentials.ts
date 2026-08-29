@@ -10,7 +10,8 @@ import { assert } from "@lynxship/contracts";
 import { IdGenerator } from "@lynxship/storage";
 
 export function redact(value: unknown, secrets: string[] = []): string {
-  let output = typeof value === "string" ? value : JSON.stringify(value);
+  let output =
+    typeof value === "string" ? value : (JSON.stringify(value) ?? "undefined");
   for (const secret of secrets) {
     if (secret) output = output.replaceAll(secret, "[REDACTED]");
   }
@@ -45,14 +46,35 @@ export interface SecretRecord {
 }
 
 export class SecretVault {
-  readonly records = new Map<string, SecretRecord>();
+  private readonly recordStore = new Map<string, SecretRecord>();
 
   private readonly masterKey: Buffer;
 
   constructor(masterKey: Buffer | string = randomBytes(32)) {
-    this.masterKey = Buffer.isBuffer(masterKey)
-      ? masterKey
-      : createHash("sha256").update(masterKey).digest();
+    if (typeof masterKey === "string") {
+      this.masterKey = createHash("sha256").update(masterKey).digest();
+    } else {
+      assert(
+        masterKey.length === 32,
+        "SECRET_MASTER_KEY",
+        "Secret vault master key must be exactly 32 bytes",
+      );
+      this.masterKey = Buffer.from(
+        masterKey as unknown as Uint8Array<ArrayBuffer>,
+      );
+    }
+  }
+
+  restore(records: readonly SecretRecord[]): void {
+    this.recordStore.clear();
+    for (const record of records)
+      this.recordStore.set(record.id, structuredClone(record));
+  }
+
+  snapshot(): SecretRecord[] {
+    return [...this.recordStore.values()].map((record) =>
+      structuredClone(record),
+    );
   }
 
   put(input: {
@@ -96,12 +118,12 @@ export class SecretVault {
       createdAt: new Date().toISOString(),
       rotatedAt: null,
     };
-    this.records.set(record.id, record);
+    this.recordStore.set(record.id, record);
     return this.inspect(record.id);
   }
 
   read(id: string): string {
-    const record = this.records.get(id);
+    const record = this.recordStore.get(id);
     assert(record, "SECRET_NOT_FOUND", "Secret not found");
     const key = this.masterKey as unknown as Parameters<
       typeof createDecipheriv
@@ -129,16 +151,16 @@ export class SecretVault {
   }
 
   inspect(id: string) {
-    const record = this.records.get(id);
+    const record = this.recordStore.get(id);
     assert(record, "SECRET_NOT_FOUND", "Secret not found");
     const { ciphertext: _ciphertext, iv: _iv, tag: _tag, ...safe } = record;
     return { ...safe, redacted: true as const };
   }
 
   rotate(id: string, value: unknown) {
-    const record = this.records.get(id);
+    const record = this.recordStore.get(id);
     assert(record, "SECRET_NOT_FOUND", "Secret not found");
-    this.records.delete(id);
+    this.recordStore.delete(id);
     return this.put({
       organizationId: record.organizationId,
       projectId: record.projectId,
@@ -149,7 +171,7 @@ export class SecretVault {
   }
 
   list(organizationId?: string) {
-    return [...this.records.values()]
+    return [...this.recordStore.values()]
       .filter(
         (record) => !organizationId || record.organizationId === organizationId,
       )

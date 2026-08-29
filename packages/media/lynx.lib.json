@@ -1,0 +1,7 @@
+{
+  "platforms": {
+    "android": { "packageName": "com.lynxship.media", "sourceDir": "android" },
+    "ios": { "sourceDir": "ios", "podspecPath": "ios/lynxship-media.podspec" },
+    "harmony": { "packageDir": "harmony" }
+  }
+}

@@ -251,6 +251,37 @@ test("authenticates before flushing queued application messages", async () => {
   client.close();
 });
 
+test("ignores late events from a socket replaced during reconnect", async () => {
+  FakeSocket.instances = [];
+  const client = createRealtimeClient({
+    url: "wss://example.com/socket",
+    token: "short-lived-token",
+    reconnect: { baseDelayMs: 1, maxDelayMs: 1 },
+    heartbeatIntervalMs: 60_000,
+    createSocket: () => new FakeSocket(),
+  });
+
+  await client.connect();
+  const first = FakeSocket.instances[0]!;
+  first.open();
+  first.receive(envelope("$lynxship.auth.ok", null));
+  const staleClose = first.onclose!;
+  staleClose({ code: 1006, reason: "network", wasClean: false });
+
+  await client.connect();
+  const second = FakeSocket.instances[1]!;
+  assert.equal(client.getSnapshot().state, "connecting");
+
+  // A delayed callback from the old transport must not clear the new one.
+  staleClose({ code: 1006, reason: "late old socket", wasClean: false });
+  assert.equal(client.getSnapshot().state, "connecting");
+
+  second.open();
+  second.receive(envelope("$lynxship.auth.ok", null));
+  assert.equal(client.getSnapshot().authenticated, true);
+  client.close();
+});
+
 test("rejects invalid and oversized messages without invoking the app handler", async () => {
   FakeSocket.instances = [];
   const errors: RealtimeError[] = [];
@@ -283,6 +314,34 @@ test("rejects invalid and oversized messages without invoking the app handler", 
   assert.equal(messages.length, 0);
   assert.ok(errors.some((error) => error.code === "PROTOCOL_ERROR"));
   assert.equal(socket.closed?.code, 1002);
+});
+
+test("isolates application callback failures from the realtime transport", async () => {
+  FakeSocket.instances = [];
+  const errors: RealtimeError[] = [];
+  const messages: unknown[] = [];
+  const client = createRealtimeClient({
+    url: "wss://example.com/socket",
+    token: "token",
+    createSocket: () => new FakeSocket(),
+    heartbeatIntervalMs: 60_000,
+    onMessage: () => {
+      throw new Error("application handler failed");
+    },
+    onError: (error) => errors.push(error),
+  });
+  client.subscribe(() => messages.push("delivered"));
+  await client.connect();
+  const socket = FakeSocket.instances[0];
+  assert.ok(socket);
+  socket.open();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  socket.receive(envelope("$lynxship.auth.ok", null));
+  socket.receive(envelope("chat.message", { text: "still delivered" }));
+  assert.deepEqual(messages, ["delivered"]);
+  assert.equal(client.getSnapshot().authenticated, true);
+  assert.ok(errors.some((error) => error.code === "CALLBACK_ERROR"));
+  client.close();
 });
 
 test("bounds the outbound queue", () => {
