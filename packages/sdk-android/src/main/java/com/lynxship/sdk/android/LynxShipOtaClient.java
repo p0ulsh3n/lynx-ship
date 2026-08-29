@@ -1,7 +1,5 @@
 package com.lynxship.sdk.android;
 
-import android.util.Base64;
-
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -16,14 +14,9 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyFactory;
 import java.security.MessageDigest;
-import java.security.PublicKey;
-import java.security.Signature;
-import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -217,7 +210,7 @@ public final class LynxShipOtaClient {
             String hash = value.optString("hash", "");
             long size = value.optLong("size", -1);
             String url = value.optString("url", "");
-            if (!isSafePath(path) || hash.length() != 64 || size < 0 || url.length() == 0) {
+            if (!OtaSecurity.isSafePath(path) || hash.length() != 64 || size < 0 || url.length() == 0) {
                 throw new IOException("Invalid OTA asset metadata");
             }
             return new Asset(path, hash.toLowerCase(), size, url);
@@ -275,7 +268,7 @@ public final class LynxShipOtaClient {
 
     public boolean installCandidate(Release release) throws Exception {
         synchronized (lock) {
-            validateRelease(release);
+            OtaSecurity.validateRelease(config, release);
             if (release.manifest.sequence <= activeSequence()) return false;
             File temporary = new File(config.storageDirectory, "download-" + release.manifest.sequence + ".tmp");
             deleteRecursively(temporary);
@@ -286,7 +279,7 @@ public final class LynxShipOtaClient {
                     total += downloadAsset(asset, temporary);
                     if (total > config.maxReleaseBytes) throw new IOException("OTA release exceeds size limit");
                 }
-                writeText(new File(temporary, "release.json"), releaseJson(release));
+                writeText(new File(temporary, "release.json"), OtaSerialization.releaseJson(release));
                 deleteRecursively(candidateDirectory);
                 if (!temporary.renameTo(candidateDirectory)) throw new IOException("Could not stage OTA candidate atomically");
                 setState("candidateSequence", Long.toString(release.manifest.sequence));
@@ -340,7 +333,7 @@ public final class LynxShipOtaClient {
     }
 
     public byte[] openActiveAsset(String path) throws IOException {
-        if (!isSafePath(path)) throw new IOException("Unsafe OTA asset path");
+        if (!OtaSecurity.isSafePath(path)) throw new IOException("Unsafe OTA asset path");
         synchronized (lock) {
             File active = new File(activeDirectory, path);
             if (active.isFile()) return readBytes(active, config.maxReleaseBytes);
@@ -352,28 +345,8 @@ public final class LynxShipOtaClient {
         return getStateLong("activeSequence", 0);
     }
 
-    private void validateRelease(Release release) throws Exception {
-        if (release == null || release.manifest.protocolVersion != 1
-                || !config.projectId.equals(release.manifest.projectId)
-                || !config.channel.equals(release.manifest.channel)
-                || !config.platform.equals(release.manifest.platform)
-                || !config.runtimeVersion.equals(release.manifest.runtimeVersion)) {
-            throw new IOException("OTA release is incompatible with this application");
-        }
-        String key = config.publicKeys.get(release.manifest.keyId);
-        if (key == null || !verifySignature(release.manifest, release.signature, key)) {
-            throw new SecurityException("OTA manifest signature is invalid or revoked");
-        }
-        long total = 0;
-        for (Asset asset : release.manifest.assets) {
-            validateUrl(asset.url);
-            total += asset.size;
-            if (total > config.maxReleaseBytes) throw new IOException("OTA release exceeds size limit");
-        }
-    }
-
     private long downloadAsset(Asset asset, File directory) throws Exception {
-        validateUrl(asset.url);
+        OtaSecurity.validateUrl(asset.url);
         File target = new File(directory, asset.path);
         File parent = target.getParentFile();
         if (parent != null && !parent.exists() && !parent.mkdirs()) throw new IOException("Could not create OTA asset directory");
@@ -420,25 +393,13 @@ public final class LynxShipOtaClient {
     }
 
     private HttpURLConnection open(URL url) throws IOException {
-        validateUrl(url.toString());
+        OtaSecurity.validateUrl(url.toString());
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setConnectTimeout(config.connectTimeoutMs);
         connection.setReadTimeout(config.readTimeoutMs);
         connection.setRequestProperty("Accept", "application/json, application/octet-stream");
         connection.setUseCaches(false);
         return connection;
-    }
-
-    private void validateUrl(String value) throws IOException {
-        URL url = new URL(value);
-        if (!"https".equalsIgnoreCase(url.getProtocol())
-                && !("http".equalsIgnoreCase(url.getProtocol()) && isLocalHost(url.getHost()))) {
-            throw new IOException("OTA URLs must use HTTPS outside localhost");
-        }
-    }
-
-    private static boolean isLocalHost(String host) {
-        return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "10.0.2.2".equals(host);
     }
 
     private static String trimEndpoint(String value) {
@@ -453,68 +414,6 @@ public final class LynxShipOtaClient {
         } catch (Exception error) {
             throw new IOException("Could not encode OTA query", error);
         }
-    }
-
-    private static boolean verifySignature(Manifest manifest, String encodedSignature, String pem) throws Exception {
-        String normalized = pem.replace("-----BEGIN PUBLIC KEY-----", "").replace("-----END PUBLIC KEY-----", "").replaceAll("\\s", "");
-        PublicKey key = KeyFactory.getInstance("Ed25519").generatePublic(new X509EncodedKeySpec(Base64.decode(normalized, Base64.DEFAULT)));
-        Signature signature = Signature.getInstance("Ed25519");
-        signature.initVerify(key);
-        signature.update(canonicalManifest(manifest).getBytes(StandardCharsets.UTF_8));
-        return signature.verify(Base64.decode(encodedSignature, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING));
-    }
-
-    private static String canonicalManifest(Manifest manifest) {
-        List<Asset> assets = new ArrayList<>(manifest.assets);
-        assets.sort(Comparator.comparing(asset -> asset.path));
-        StringBuilder result = new StringBuilder("{\"assets\":[");
-        for (int index = 0; index < assets.size(); index++) {
-            if (index > 0) result.append(',');
-            Asset asset = assets.get(index);
-            result.append("{\"hash\":").append(JSONObject.quote(asset.hash))
-                    .append(",\"path\":").append(JSONObject.quote(asset.path))
-                    .append(",\"size\":").append(asset.size)
-                    .append(",\"url\":").append(JSONObject.quote(asset.url)).append('}');
-        }
-        return result.append("],\"channel\":").append(JSONObject.quote(manifest.channel))
-                .append(",\"keyId\":").append(JSONObject.quote(manifest.keyId))
-                .append(",\"platform\":").append(JSONObject.quote(manifest.platform))
-                .append(",\"projectId\":").append(JSONObject.quote(manifest.projectId))
-                .append(",\"protocolVersion\":").append(manifest.protocolVersion)
-                .append(",\"runtimeVersion\":").append(JSONObject.quote(manifest.runtimeVersion))
-                .append(",\"sequence\":").append(manifest.sequence).append('}').toString();
-    }
-
-    private static String releaseJson(Release release) {
-        return "{\"id\":" + JSONObject.quote(release.id) + ",\"signature\":"
-                + JSONObject.quote(release.signature) + ",\"manifest\":"
-                + manifestJson(release.manifest) + "}";
-    }
-
-    private static String manifestJson(Manifest manifest) {
-        StringBuilder result = new StringBuilder("{\"protocolVersion\":")
-                .append(manifest.protocolVersion)
-                .append(",\"projectId\":").append(JSONObject.quote(manifest.projectId))
-                .append(",\"channel\":").append(JSONObject.quote(manifest.channel))
-                .append(",\"platform\":").append(JSONObject.quote(manifest.platform))
-                .append(",\"runtimeVersion\":").append(JSONObject.quote(manifest.runtimeVersion))
-                .append(",\"sequence\":").append(manifest.sequence)
-                .append(",\"keyId\":").append(JSONObject.quote(manifest.keyId))
-                .append(",\"assets\":[");
-        for (int index = 0; index < manifest.assets.size(); index++) {
-            if (index > 0) result.append(',');
-            Asset asset = manifest.assets.get(index);
-            result.append("{\"path\":").append(JSONObject.quote(asset.path))
-                    .append(",\"hash\":").append(JSONObject.quote(asset.hash))
-                    .append(",\"size\":").append(asset.size)
-                    .append(",\"url\":").append(JSONObject.quote(asset.url)).append('}');
-        }
-        return result.append("]}").toString();
-    }
-
-    private static boolean isSafePath(String path) {
-        return path != null && !path.isEmpty() && !path.startsWith("/") && !path.contains("\\")
-                && !path.contains("..") && !new File(path).isAbsolute();
     }
 
     private static String readText(InputStream input, long maxBytes) throws IOException {

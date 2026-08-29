@@ -7,7 +7,7 @@
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "test": "pnpm --filter @lynxship/microhs build && pnpm --filter @lynxship/lynx-realtime build && pnpm --filter @lynxship/notifications build && pnpm --filter @lynxship/expo build && pnpm --filter @lynxship/cli build && pnpm --filter create-lynxship-app build && tsx --test test/core.test.ts test/api.test.ts test/cli.test.ts test/cli-ui.test.ts test/create-app.test.ts test/plugins.test.ts test/microhs.test.ts test/expo.test.ts test/realtime.test.ts test/notifications.test.ts",
-    "lint": "pnpm structure:check && tsx scripts/lint.ts",
+    "lint": "pnpm architecture:check && pnpm structure:check && tsx scripts/lint.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "structure:fix": "eslint . --fix",
@@ -19,6 +19,7 @@
     "dashboard:dev": "pnpm --filter @lynxship/dashboard dev",
     "dashboard:build": "pnpm --filter @lynxship/dashboard build",
     "typecheck": "pnpm -r typecheck",
+    "architecture:check": "node scripts/check-architecture.mjs",
     "skills:check-links": "node scripts/check-skill-links.mjs"
   },
   "engines": {

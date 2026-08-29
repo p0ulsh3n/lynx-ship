@@ -6,7 +6,7 @@ import {
   type RealtimeEnvelope,
   type RealtimeOptions,
   type RealtimeState,
-} from "./index.js";
+} from "./client.js";
 
 export const RECEIPT_PROTOCOL_VERSION = 1 as const;
 

@@ -35,8 +35,8 @@
       "import": "./dist/client.js"
     },
     "./server": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     },
     "./expo": {
       "types": "./dist/expo.d.ts",

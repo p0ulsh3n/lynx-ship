@@ -1,6 +1,6 @@
 import { assert } from "@lynxship/contracts";
 import { envValue, loadPersistentApp } from "./app.js";
-import { createApi } from "./index.js";
+import { createApi } from "./http-api.js";
 import { FixedWindowRateLimiter } from "./services.js";
 
 const root = process.env.LYNXSHIP_STATE_DIR ?? process.cwd();

@@ -16,6 +16,35 @@ import {
   syncIosRuntimeResources,
 } from "../packages/cli/src/ios-build.js";
 import { syncHarmonyAssets } from "../packages/cli/src/harmony-build.js";
+import {
+  projectDirectoryFlag,
+  readFlag,
+} from "../packages/cli/src/runtime/args.js";
+import {
+  exists,
+  findLockfile,
+  findProjectRoot,
+} from "../packages/cli/src/runtime/project.js";
+
+test("CLI runtime helpers resolve flags and project boundaries deterministically", async () => {
+  assert.equal(
+    projectDirectoryFlag(["doctor", "--project-dir", "./example"]),
+    "./example",
+  );
+  assert.equal(
+    projectDirectoryFlag(["doctor", "--project-dir=./inline"]),
+    "./inline",
+  );
+  assert.equal(
+    readFlag(["build", "--profile", "simulator"], "--profile"),
+    "simulator",
+  );
+  assert.equal(readFlag(["build"], "--profile", "production"), "production");
+  const isolated = await mkdtemp(join(tmpdir(), "lynxship-runtime-"));
+  assert.equal(await exists(isolated), true);
+  assert.equal(findProjectRoot(isolated), isolated);
+  assert.equal(await findLockfile(isolated), null);
+});
 
 function runCli(
   cwd: string,

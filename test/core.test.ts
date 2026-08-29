@@ -9,7 +9,6 @@ import {
 import { inspectAutolink, requireAutolinkReady } from "@lynxship/cli/autolink";
 import { TokenManager, scopesForRole } from "@lynxship/auth";
 import {
-  createBuild,
   transitionBuild,
   BuildService,
   runtimeFingerprint,
@@ -484,7 +483,7 @@ test("real store providers upload signed artifacts through official flows", asyn
       releaseStatus: "draft",
     },
     {
-      fetchImpl: async (input, init) => {
+      fetchImpl: async (input) => {
         const url = String(input);
         googleCalls.push(url);
         if (url.includes("oauth2.googleapis.com"))

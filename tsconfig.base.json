@@ -4,49 +4,56 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
-    "baseUrl": ".",
     "paths": {
-      "@lynxship/api": ["packages/api/src/index.ts"],
-      "@lynxship/auth": ["packages/auth/src/index.ts"],
+      "@lynxship/api": ["./packages/api/src/index.ts"],
+      "@lynxship/auth": ["./packages/auth/src/index.ts"],
       "@lynxship/build-orchestrator": [
-        "packages/build-orchestrator/src/index.ts"
+        "./packages/build-orchestrator/src/index.ts"
       ],
-      "@lynxship/build-providers": ["packages/build-providers/src/index.ts"],
-      "@lynxship/cli": ["packages/cli/src/index.ts"],
-      "@lynxship/cli/config": ["packages/cli/src/config.ts"],
+      "@lynxship/build-providers": ["./packages/build-providers/src/index.ts"],
+      "@lynxship/cli": ["./packages/cli/src/index.ts"],
+      "@lynxship/cli/config": ["./packages/cli/src/config.ts"],
       "@lynxship/cli/runtime-fingerprint": [
-        "packages/cli/src/runtime-fingerprint.ts"
+        "./packages/cli/src/runtime-fingerprint.ts"
       ],
-      "@lynxship/cli/autolink": ["packages/cli/src/autolink.ts"],
-      "@lynxship/cli/frameworks": ["packages/cli/src/frameworks.ts"],
-      "@lynxship/cli/ui/*": ["packages/cli/src/ui/*"],
-      "@lynxship/contracts": ["packages/contracts/src/index.ts"],
-      "@lynxship/microhs": ["packages/microhs/src/index.ts"],
-      "@lynxship/lynx-realtime": ["packages/realtime/src/index.ts"],
-      "@lynxship/lynx-realtime/presence": ["packages/realtime/src/presence.ts"],
-      "@lynxship/lynx-realtime/receipts": ["packages/realtime/src/receipts.ts"],
+      "@lynxship/cli/autolink": ["./packages/cli/src/autolink.ts"],
+      "@lynxship/cli/frameworks": ["./packages/cli/src/frameworks.ts"],
+      "@lynxship/cli/ui/*": ["./packages/cli/src/ui/*"],
+      "@lynxship/contracts": ["./packages/contracts/src/index.ts"],
+      "@lynxship/microhs": ["./packages/microhs/src/index.ts"],
+      "@lynxship/lynx-realtime": ["./packages/realtime/src/index.ts"],
+      "@lynxship/lynx-realtime/presence": [
+        "./packages/realtime/src/presence.ts"
+      ],
+      "@lynxship/lynx-realtime/receipts": [
+        "./packages/realtime/src/receipts.ts"
+      ],
       "@lynxship/lynx-realtime/activity-stack": [
-        "packages/realtime/src/activity-stack.ts"
+        "./packages/realtime/src/activity-stack.ts"
       ],
-      "@lynxship/notifications": ["packages/notifications/src/index.ts"],
-      "@lynxship/notifications/server": ["packages/notifications/src/index.ts"],
+      "@lynxship/notifications": ["./packages/notifications/src/index.ts"],
+      "@lynxship/notifications/server": [
+        "./packages/notifications/src/server.ts"
+      ],
       "@lynxship/notifications/client": [
-        "packages/notifications/src/client.ts"
+        "./packages/notifications/src/client.ts"
       ],
-      "@lynxship/notifications/expo": ["packages/notifications/src/expo.ts"],
-      "@lynxship/notifications/lynx": ["packages/notifications/src/lynx.ts"],
-      "@lynxship/expo": ["packages/expo/src/index.ts"],
-      "@lynxship/plugin-api": ["packages/plugin-api/src/index.ts"],
-      "@lynxship/db": ["packages/db/src/index.ts"],
-      "@lynxship/queue": ["packages/queue/src/index.ts"],
-      "@lynxship/signing": ["packages/signing/src/index.ts"],
-      "@lynxship/storage": ["packages/storage/src/index.ts"],
-      "@lynxship/submit": ["packages/submit/src/index.ts"],
-      "@lynxship/worker-agent": ["packages/worker-agent/src/index.ts"]
+      "@lynxship/notifications/expo": ["./packages/notifications/src/expo.ts"],
+      "@lynxship/notifications/lynx": ["./packages/notifications/src/lynx.ts"],
+      "@lynxship/expo": ["./packages/expo/src/index.ts"],
+      "@lynxship/plugin-api": ["./packages/plugin-api/src/index.ts"],
+      "@lynxship/db": ["./packages/db/src/index.ts"],
+      "@lynxship/queue": ["./packages/queue/src/index.ts"],
+      "@lynxship/signing": ["./packages/signing/src/index.ts"],
+      "@lynxship/storage": ["./packages/storage/src/index.ts"],
+      "@lynxship/submit": ["./packages/submit/src/index.ts"],
+      "@lynxship/worker-agent": ["./packages/worker-agent/src/index.ts"]
     }
   }
 }

@@ -1,4 +1,3 @@
-import { assert } from "@lynxship/contracts";
 import { IdGenerator } from "@lynxship/storage";
 
 export interface AuditEvent {

@@ -1,7 +1,6 @@
 import {
   access,
   cp,
-  mkdir,
   readdir,
   readFile,
   rename,
