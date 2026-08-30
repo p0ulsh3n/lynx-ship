@@ -18,16 +18,9 @@ async function copyIosOutput(source: string, target: string): Promise<boolean> {
   return true;
 }
 
-/**
- * Rspeedy leaves external resources beside the Lynx bundle. Xcode does not
- * know about those generated files, so copy the complete output into the
- * final app bundle after the native host has been compiled. This also makes
- * older LynxShip-generated iOS hosts behave correctly without editing their
- * Xcode project files.
- */
-export async function syncIosRuntimeResources(
+async function syncBundleOutput(
   root: string,
-  appBundle: string,
+  target: string,
 ): Promise<string[]> {
   const distRoot = join(root, "dist");
   const entries = await readdir(distRoot, { withFileTypes: true }).catch(
@@ -43,11 +36,32 @@ export async function syncIosRuntimeResources(
   );
 
   const copied: string[] = [];
-  for (const name of [...bundles, "async", "static"]) {
-    if (await copyIosOutput(join(distRoot, name), join(appBundle, name)))
+  for (const name of [...bundles, "async", "static"])
+    if (await copyIosOutput(join(distRoot, name), join(target, name)))
       copied.push(name);
-  }
   return copied;
+}
+
+/** Copy generated bundles into the configured iOS native resource directory. */
+export async function syncIosBuildResources(
+  root: string,
+  target: string,
+): Promise<string[]> {
+  return syncBundleOutput(root, target);
+}
+
+/**
+ * Rspeedy leaves external resources beside the Lynx bundle. Xcode does not
+ * know about those generated files, so copy the complete output into the
+ * final app bundle after the native host has been compiled. This also makes
+ * older LynxShip-generated iOS hosts behave correctly without editing their
+ * Xcode project files.
+ */
+export async function syncIosRuntimeResources(
+  root: string,
+  appBundle: string,
+): Promise<string[]> {
+  return syncBundleOutput(root, appBundle);
 }
 
 async function findAppIconSet(directory: string): Promise<string | undefined> {

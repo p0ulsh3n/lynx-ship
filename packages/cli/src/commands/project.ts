@@ -26,6 +26,7 @@ import { hasWebConfiguration } from "../web-build.js";
 import { hasDesktopHost } from "../desktop-build.js";
 import { exists } from "../runtime/project.js";
 import type { CliUi } from "../ui/index.js";
+import { loadAppConfig } from "../app-config.js";
 
 export interface ProjectCommandContext {
   root: string;
@@ -44,6 +45,10 @@ export async function looksLikeLynxProject(
     "lynx.config.js",
     "lynx.config.mjs",
     "lynx.config.cjs",
+    "app.config.ts",
+    "app.config.js",
+    "app.config.mjs",
+    "app.config.cjs",
   ];
   if (
     await Promise.any(
@@ -132,9 +137,13 @@ export async function ensureNativeHostForBuild(
       "ANDROID_HOST_EXISTS",
       "An android/ directory exists but does not contain a usable Gradle host. LynxShip will not overwrite it; repair it or remove it deliberately, then rerun the build.",
     );
+    const appConfig = await loadAppConfig(context.root);
+    const configuredApplicationId =
+      appConfig?.config.platform?.android?.packageName;
     const suggestedId = suggestedAndroidApplicationId(context.root);
     const applicationId =
       context.flag("--application-id") ??
+      configuredApplicationId ??
       (context.ui.interactive
         ? await context.prompt("Android application ID", suggestedId)
         : "");
@@ -148,7 +157,7 @@ export async function ensureNativeHostForBuild(
     );
     const result = await initializeAndroidHost(context.root, {
       applicationId,
-      appName: basename(context.root),
+      appName: appConfig?.config.appName ?? basename(context.root),
     });
     context.ui.success(`Android host created: ${result.directory}`);
     return;
@@ -197,8 +206,12 @@ export async function ensureNativeHostForBuild(
     "An ios/ directory exists but does not contain a usable Xcode host. LynxShip will not overwrite it; repair it deliberately, then rerun the build.",
   );
   const suggestedId = suggestedIosBundleIdentifier(context.root);
+  const appConfig = await loadAppConfig(context.root);
+  const configuredBundleIdentifier =
+    appConfig?.config.platform?.ios?.bundleIdentifier;
   const bundleIdentifier =
     context.flag("--bundle-identifier") ??
+    configuredBundleIdentifier ??
     (context.ui.interactive
       ? await context.prompt("iOS bundle identifier", suggestedId)
       : "");
@@ -212,8 +225,8 @@ export async function ensureNativeHostForBuild(
   );
   const result = await initializeIosHost(context.root, {
     bundleIdentifier,
-    appName: basename(context.root),
-    appIcon: context.flag("--icon") ?? undefined,
+    appName: appConfig?.config.appName ?? basename(context.root),
+    appIcon: context.flag("--icon") ?? appConfig?.config.appIcon ?? undefined,
   });
   context.ui.success(`iOS host created: ${result.directory}`);
 }

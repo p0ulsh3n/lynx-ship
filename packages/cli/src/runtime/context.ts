@@ -105,7 +105,7 @@ export function createCliRuntime(rawArgs: string[]) {
 
   async function requireOperationalConfiguration(
     platform: Platform,
-    options: { requireR2?: boolean } = {},
+    options: { requireR2?: boolean; requireSigning?: boolean } = {},
   ): Promise<void> {
     await requireProjectRoot();
     const status = await readConfigurationStatus();
@@ -115,7 +115,7 @@ export function createCliRuntime(rawArgs: string[]) {
         "CLI_R2_REQUIRED",
         "Cloudflare R2 must be configured first. Run `lynxship storage configure`.",
       );
-    if (platform !== "android") return;
+    if (platform !== "android" || options.requireSigning === false) return;
     assert(
       status.android,
       "BUILD_SIGNING_REQUIRED",
@@ -155,6 +155,7 @@ export function createCliRuntime(rawArgs: string[]) {
   async function renderConfigurationFooter(): Promise<void> {
     if (!ui.interactive || ui.options.quiet) return;
     if (rawArgs[0] === "inspect") return;
+    if (rawArgs.includes("--remote")) return;
     const profileIndex = rawArgs.indexOf("--profile");
     const simulatorProfile =
       profileIndex >= 0 && rawArgs[profileIndex + 1] === "simulator";

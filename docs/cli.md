@@ -8,6 +8,15 @@ The published executable is installed with `npm install --global
 @lynxship/cli@latest` and is invoked as `lynxship`. The complete operational surface
 is:
 
+LynxShip keeps `lynxship.json` as the source of truth for its build, signing and
+OTA settings. A Sparkling-style `app.config.ts`, `.js`, `.mjs`, `.cts` or `.cjs`
+file is loaded explicitly during a build when it exposes `lynxConfig`: the CLI
+passes that object directly to the project's installed `@lynx-js/rspeedy`,
+uses its validated platform identifiers, app icon, routes/plugins and native
+asset paths, and does not create a proxy `lynx.config` file. Existing projects
+without `app.config` continue to use their package-manager build script.
+Discovery and project scans remain source-only and never execute app config.
+
 ```text
 init                         Initialize or link a project
 doctor                       Check the local toolchain and project
@@ -24,7 +33,8 @@ plugin doctor                Validate plugin metadata without changing files
 plugin apply                 Apply plugin configuration/native changes
 plugin apply --dry-run       Preview plugin changes without writing files
 ota doctor                   Check native OTA host integration
-build create                 Build, sign and upload an artifact
+build create                 Build, sign and upload an artifact locally
+build create --remote        Snapshot, upload and queue a hosted build
 build all                    Build Android, iOS, HarmonyOS, Web and Desktop
 build list/status             Inspect build jobs
 build cancel/retry            Manage a build job
@@ -65,6 +75,26 @@ reported as such and may obtain a profile during the build.
 performs the real native build and signature verification, keeps the UUID-named
 artifact locally, and skips only the Cloudflare R2 transfer. Android builds are
 allowed on Linux, macOS and Windows; iOS builds are allowed only on macOS.
+
+`lynxship build --remote` is the hosted-worker path. It uploads a verified,
+content-addressed source snapshot and creates a tenant-scoped API job; it does
+not use local native SDKs or signing credentials. The current transport is a
+bounded JSON request and refuses snapshots larger than 72 MiB. A registered
+worker must be online and configured to materialize the source before it can
+execute the build. `--remote` is incompatible with `--local`, `--no-upload` and
+the local `--simulator` flow.
+
+Hosted jobs can be inspected and managed through the same CLI:
+
+```bash
+lynxship build list --remote
+lynxship build status <build-id> --remote
+lynxship build cancel <build-id> --remote
+lynxship build retry <build-id> --remote
+```
+
+The API remains the source of truth; cancel and retry also refresh the local
+state cache.
 
 For iOS Simulator builds, an interactive `lynxship build --platform ios
 --simulator` installs the generated `.app`, opens Simulator and launches the

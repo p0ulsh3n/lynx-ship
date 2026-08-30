@@ -17,6 +17,7 @@
     { "path": "../signing" },
     { "path": "../submit" },
     { "path": "../worker-agent" },
+    { "path": "../worker-service" },
     { "path": "../storage" }
   ]
 }

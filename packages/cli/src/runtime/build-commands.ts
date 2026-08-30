@@ -12,6 +12,16 @@ import {
 import { executeBuild } from "../commands/build-execution.js";
 import { runOtaCommand } from "../commands/ota.js";
 import { runSubmit } from "../commands/submit.js";
+import { executeRemoteBuild } from "../commands/remote-build.js";
+import {
+  cancelRemoteBuild,
+  ensureRemoteTarget,
+  getRemoteBuild,
+  listRemoteBuilds,
+  retryRemoteBuild,
+  type RemoteCliState,
+} from "../remote.js";
+import { prepareRemoteSource } from "../commands/remote-build.js";
 import { loadState, saveState } from "./state.js";
 import type { CliRuntime } from "./context.js";
 
@@ -68,13 +78,29 @@ export async function runBuildOrStateCommand(
 
   const subcommand =
     context.args[0] && !context.args[0].startsWith("--")
-      ? context.args.shift()
+      ? (context.args.shift() ?? "create")
       : "create";
   const platformArgument = context.flag("--platform", "android")!;
   const buildAll = subcommand === "all" || platformArgument === "all";
   const platform = buildAll ? "android" : platformValue(platformArgument);
   const simulator = context.args.includes("--simulator");
+  const remote = context.args.includes("--remote");
   const skipUpload = context.args.includes("--no-upload") || simulator;
+  assert(
+    !remote || !context.args.includes("--local"),
+    "CLI_BUILD_FLAGS",
+    "--remote and --local are mutually exclusive.",
+  );
+  assert(
+    !remote || !simulator,
+    "CLI_BUILD_FLAGS",
+    "--remote cannot create a local iOS Simulator app. Use a local macOS build for simulator output.",
+  );
+  assert(
+    !remote || !context.args.includes("--no-upload"),
+    "CLI_BUILD_FLAGS",
+    "--remote always stores the build artifact on the configured remote worker; remove --no-upload.",
+  );
   assert(
     !simulator || platformArgument === "ios",
     "IOS_SIMULATOR_PLATFORM",
@@ -87,8 +113,39 @@ export async function runBuildOrStateCommand(
     "--allow-unsigned is only available with --no-upload and can never upload an unsigned Desktop artifact.",
   );
   await context.requireOperationalConfiguration(platform, {
-    requireR2: !skipUpload,
+    requireR2: remote ? false : !skipUpload,
+    requireSigning: !remote,
   });
+
+  if (remote && ["list", "status", "cancel", "retry"].includes(subcommand)) {
+    const config = await loadConfig(context.root);
+    const remoteState = state as RemoteCliState;
+    if (subcommand === "list") {
+      context.printValue(await listRemoteBuilds(config, remoteState));
+      return;
+    }
+    const id = context.args[0];
+    assert(
+      id,
+      "CLI_BUILD_ID_REQUIRED",
+      `A build id is required for ${subcommand}.`,
+    );
+    const job =
+      subcommand === "status"
+        ? await getRemoteBuild(config, id)
+        : subcommand === "cancel"
+          ? await cancelRemoteBuild(config, id)
+          : await retryRemoteBuild(config, id);
+    if (subcommand !== "status") {
+      builds.restore([
+        ...builds.list().filter((candidate) => candidate.id !== job.id),
+        job,
+      ]);
+      await saveState(state, repository, builds, submissions);
+    }
+    context.printValue(job);
+    return;
+  }
 
   if (subcommand === "list") {
     context.printValue(builds.list());
@@ -134,7 +191,7 @@ export async function runBuildOrStateCommand(
     ? ["android", "ios", "harmony", "web", "desktop"]
     : [platform];
 
-  if (buildAll && wait && !local) {
+  if (buildAll && wait && !local && !remote) {
     assert(
       process.platform === "darwin",
       "BUILD_ALL_MACOS_REQUIRED",
@@ -147,6 +204,55 @@ export async function runBuildOrStateCommand(
         profile,
         config,
       );
+  }
+
+  if (remote) {
+    const loaded = { state, repository, builds, submissions };
+    if (buildAll) {
+      const source = await prepareRemoteSource(
+        context.root,
+        config,
+        state as RemoteCliState,
+      );
+      await ensureRemoteTarget(config, state as RemoteCliState);
+      const outcomes = await Promise.all(
+        platforms.map((target) =>
+          executeRemoteBuild({
+            root: context.root,
+            config,
+            state,
+            loaded,
+            platform: target,
+            profile,
+            wait,
+            source,
+            printValue: context.printValue,
+            ui: context.ui,
+          }),
+        ),
+      );
+      context.printValue({
+        status: outcomes.every((job) => job.state === "success")
+          ? "success"
+          : outcomes.some((job) => ["failed", "timed_out"].includes(job.state))
+            ? "failed"
+            : "queued",
+        builds: outcomes,
+      });
+    } else {
+      await executeRemoteBuild({
+        root: context.root,
+        config,
+        state,
+        loaded,
+        platform,
+        profile,
+        wait,
+        printValue: context.printValue,
+        ui: context.ui,
+      });
+    }
+    return;
   }
 
   const buildOptions = {

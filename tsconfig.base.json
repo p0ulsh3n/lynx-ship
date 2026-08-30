@@ -71,7 +71,13 @@
       "@lynxship/submit": ["./packages/submit/src/index.ts"],
       "@lynxship/worker-agent": ["./packages/worker-agent/src/index.ts"],
       "@lynxship/worker-android": ["./packages/worker-android/src/index.ts"],
-      "@lynxship/worker-ios": ["./packages/worker-ios/src/index.ts"]
+      "@lynxship/worker-ios": ["./packages/worker-ios/src/index.ts"],
+      "@lynxship/worker-service": ["./packages/worker-service/src/index.ts"],
+      "@lynxship/worker-runtime": ["./packages/worker-runtime/src/index.ts"],
+      "@lynxship/framework": ["./packages/framework/src/index.ts"],
+      "@lynxship/navigation": ["./packages/navigation/src/index.ts"],
+      "@lynxship/bridge": ["./packages/bridge/src/index.ts"],
+      "@lynxship/performance": ["./packages/performance/src/index.ts"]
     }
   }
 }

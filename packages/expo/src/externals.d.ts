@@ -17,6 +17,9 @@ declare module "react" {
     type: unknown,
     props: Record<string, unknown> | null,
   ): ReactNode;
+  export function forwardRef<T, Props>(
+    render: (props: Props, ref: T | null) => ReactNode,
+  ): ComponentType<Props & { ref?: T | null }>;
 }
 
 declare module "react-native" {

@@ -8,6 +8,9 @@ let package = Package(
         .library(name: "LynxShipOta", targets: ["LynxShipOta"]),
     ],
     targets: [
-        .target(name: "LynxShipOta"),
+        // The native Lynx container is consumed through the CocoaPods target,
+        // which supplies the official Lynx framework dependency. Keeping the
+        // OTA target explicit preserves a dependency-free Swift package.
+        .target(name: "LynxShipOta", path: "Sources", sources: ["LynxShipOtaClient.swift"]),
     ]
 )

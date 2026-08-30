@@ -11,6 +11,7 @@
   "references": [
     { "path": "../build-orchestrator" },
     { "path": "../i18n" },
+    { "path": "../framework" },
     { "path": "../contracts" },
     { "path": "../microhs" },
     { "path": "../plugin-api" },

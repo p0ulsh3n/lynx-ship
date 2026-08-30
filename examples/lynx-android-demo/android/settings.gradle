@@ -28,3 +28,5 @@ include ":lynxship-media"
 project(":lynxship-media").projectDir = file("../../../packages/media/android")
 include ":lynxship-notifications"
 project(":lynxship-notifications").projectDir = file("../../../packages/notifications/android")
+include ":lynxship-navigation"
+project(":lynxship-navigation").projectDir = file("../../../packages/navigation/android")

@@ -5,10 +5,23 @@ export interface StorageAdapter {
   clear(): Promise<void>;
 }
 
+export interface DeviceStorageOptions {
+  /** Optional logical namespace, equivalent to a business/storage scope. */
+  readonly namespace?: string;
+  /** Expire the value after this many milliseconds. */
+  readonly validDurationMs?: number;
+}
+
 export interface DeviceStorage {
-  get<T>(key: string): Promise<T | null>;
-  set<T>(key: string, value: T): Promise<void>;
-  remove(key: string): Promise<void>;
+  get<T>(
+    key: string,
+    options?: Pick<DeviceStorageOptions, "namespace">,
+  ): Promise<T | null>;
+  set<T>(key: string, value: T, options?: DeviceStorageOptions): Promise<void>;
+  remove(
+    key: string,
+    options?: Pick<DeviceStorageOptions, "namespace">,
+  ): Promise<void>;
   clear(): Promise<void>;
 }
 

@@ -1,0 +1,43 @@
+{
+  "name": "@lynxship/bridge",
+  "version": "0.1.0",
+  "description": "Allow-listed, timeout-bounded JavaScript to native bridge contract for Lynx hosts.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/p0ulsh3n/lynx-ship.git",
+    "directory": "packages/bridge"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "android/build.gradle",
+    "android/consumer-rules.pro",
+    "android/src/main/java/com/lynxship/bridge/*.java",
+    "ios/lynxship-bridge.podspec",
+    "ios/*.h",
+    "ios/*.m",
+    "lynx.lib.json"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false",
+    "codegen": "lynx-autolink-codegen"
+  },
+  "devDependencies": {
+    "@lynx-js/autolink-codegen": "0.4.1"
+  }
+}

@@ -3,6 +3,7 @@ import {
   createId,
   LynxShipError,
   type BuildJob,
+  type BuildSourceReference,
   type BuildState,
   type Platform,
 } from "@lynxship/contracts";
@@ -24,7 +25,7 @@ export const BUILD_STATES: readonly BuildState[] = [
 
 const active = new Set<BuildState>(BUILD_STATES.slice(0, 8));
 const transitions: ReadonlyMap<BuildState, readonly BuildState[]> = new Map([
-  ["created", ["uploading_source", "canceled"]],
+  ["created", ["uploading_source", "failed", "canceled"]],
   ["uploading_source", ["queued", "failed", "canceled"]],
   ["queued", ["provisioning", "failed", "canceled"]],
   [
@@ -48,6 +49,7 @@ export interface CreateBuildInput {
   profile: string;
   idempotencyKey?: string | null;
   sourceHash?: string | null;
+  source?: BuildSourceReference;
   runtimeVersion?: string;
   runtimeInputs?: Record<string, unknown>;
 }
@@ -58,6 +60,12 @@ export function createBuild(input: CreateBuildInput): BuildJob {
     "BUILD_INPUT",
     "Build project, organization and profile are required",
   );
+  if (input.source)
+    assert(
+      (input.sourceHash ?? input.source.hash) === input.source.hash,
+      "BUILD_SOURCE_MISMATCH",
+      "Build sourceHash must match the source reference hash",
+    );
   return {
     id: createId("build"),
     projectId: input.projectId,
@@ -65,7 +73,8 @@ export function createBuild(input: CreateBuildInput): BuildJob {
     platform: input.platform,
     profile: input.profile,
     idempotencyKey: input.idempotencyKey ?? null,
-    sourceHash: input.sourceHash ?? null,
+    sourceHash: input.sourceHash ?? input.source?.hash ?? null,
+    source: input.source,
     runtimeVersion: input.runtimeVersion,
     runtimeInputs: input.runtimeInputs,
     state: "created",
@@ -168,6 +177,19 @@ export class BuildOrchestrator {
 
   report(id: string, report: BuildWorkerReport): BuildJob {
     const job = this.get(id);
+    // Redis workers are at-least-once. A network retry may deliver the same
+    // state report twice after the first write committed, so repeating the
+    // current state must be an idempotent observation rather than an invalid
+    // state transition.
+    if (job.state === report.state) {
+      if (report.log)
+        job.logs.push({
+          ...report.log,
+          at: new Date().toISOString(),
+        });
+      if (report.artifact) job.artifact = report.artifact;
+      return job;
+    }
     transitionBuild(job, report.state, report.reason ?? "worker report");
     if (report.log)
       job.logs.push({
@@ -221,3 +243,5 @@ export * from "./runtime.js";
 export * from "./cache.js";
 
 export * from "./source.js";
+
+export * from "./source-snapshot.js";

@@ -12,7 +12,7 @@ artifacts, store submission and signed OTA updates in one explicit workflow.
 > official packaging configuration. Store submission still requires the
 > developer's own Apple or Google accounts and the stores' review steps.
 
-[Documentation](docs/) · [Package catalog](docs/package-catalog.md) · [CLI design system](docs/cli.md) · [Operations](docs/operations.md) · [Compatibility](docs/compatibility.md)
+[Documentation](docs/) · [Package catalog](docs/package-catalog.md) · [CLI design system](docs/cli.md) · [Operations](docs/operations.md) · [Compatibility](docs/compatibility.md) · [Sparkling comparison](docs/sparkling-comparison.md)
 
 ## Contributor skills
 
@@ -79,6 +79,18 @@ the current stable `create-rspeedy@latest` template; their lockfile records
 the resolved versions so later builds remain reproducible. The generator also
 adds `@lynxship/cli@latest` locally, so a global LynxShip installation is not
 required.
+
+### Framework runtime contracts
+
+The runtime layer is intentionally modular. `@lynxship/framework` coordinates
+host lifecycle and first-screen readiness; `@lynxship/navigation` validates
+navigation targets for injected Android, iOS, HarmonyOS, web or desktop
+adapters; and `@lynxship/bridge` provides an allow-listed, timeout-bounded
+JavaScript-to-native transport contract plus an opt-in Android/iOS Lynx
+transport. These packages do not fabricate a native host or hide
+platform-specific permissions, signing, navigation stacks or cloud services.
+See the [package catalog](docs/package-catalog.md) for the exact boundary and
+test status of each package.
 
 ### Vue Lynx projects
 
@@ -213,6 +225,32 @@ Rspeedy bundle
   -> Cloudflare R2 upload
   -> expiring download URL and terminal QR code
 ```
+
+### Queue a hosted build
+
+Use `--remote` when the build must run on a registered LynxShip worker instead
+of on the current machine. The CLI creates a deterministic source snapshot,
+excludes `node_modules`, generated output and credential-like files, verifies
+the snapshot by SHA-256, uploads it to the configured API and queues the job.
+No local Android signing, Xcode or R2 credentials are required for this path;
+the worker and control plane must be configured separately.
+
+```bash
+lynxship build --platform android --profile production --remote
+lynxship build --platform ios --profile production --remote
+lynxship build --platform all --profile production --remote --no-wait
+lynxship build status <build-id>
+lynxship build status <build-id> --remote
+lynxship build cancel <build-id> --remote
+lynxship build retry <build-id> --remote
+```
+
+`--remote` cannot be combined with `--local`, `--no-upload` or the local iOS
+`--simulator` flow. The current source transport is a bounded JSON upload (72
+MiB encoded snapshot limit); larger projects need the planned presigned or
+multipart storage transport. A remote build also requires a worker capable of
+materializing the verified snapshot; creating the queue job alone does not
+execute a native build.
 
 ### Submit the latest successful build
 
@@ -786,8 +824,7 @@ fails. Configure Electron Builder with `WIN_CSC_LINK`/`CSC_LINK` and the
 corresponding protected password, or with the target platform's signing
 identity. For local packaging tests only, use `--allow-unsigned --no-upload`.
 
-See the current official [Lynx Harmony integration](https://lynxjs.org/next/guide/start/integrate-with-existing-apps.html),
-[Rspeedy Web integration](https://lynxjs.org/3.6/rspeedy/start/integrate-with-existing-apps),
+See the current official [Lynx/Rspeedy existing-app integration](https://lynxjs.org/next/rspeedy/start/integrate-with-existing-apps),
 [Lynxtron builder](https://lynxjs.org/next/lynxtron/api/%40lynx-js/lynxtron-builder/index.html)
 and [OpenHarmony HAP signer](https://github.com/openharmony/developtools_hapsigner)
 documentation before changing a target adapter.

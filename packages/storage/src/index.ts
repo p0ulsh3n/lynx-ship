@@ -8,6 +8,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { sha256, assert, type Artifact } from "@lynxship/contracts";
 
 export class FileStorage {
@@ -138,6 +139,47 @@ export class S3ObjectStorage {
       size: result.ContentLength,
       contentType: result.ContentType,
     };
+  }
+
+  async presignGet(key: string, expiresIn = 3_600): Promise<string> {
+    assertObjectKey(key);
+    assert(
+      Number.isInteger(expiresIn) && expiresIn >= 1 && expiresIn <= 604_800,
+      "STORAGE_URL_EXPIRY",
+      "Storage download URL expiry must be between 1 second and 7 days",
+    );
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      { expiresIn },
+    );
+  }
+
+  async presignPut(
+    key: string,
+    contentType: string,
+    expiresIn = 900,
+  ): Promise<string> {
+    assertObjectKey(key);
+    assert(
+      contentType.length > 0 && contentType.length <= 255,
+      "STORAGE_CONTENT_TYPE",
+      "Storage content type is required and must be at most 255 characters",
+    );
+    assert(
+      Number.isInteger(expiresIn) && expiresIn >= 1 && expiresIn <= 3_600,
+      "STORAGE_URL_EXPIRY",
+      "Storage upload URL expiry must be between 1 second and 1 hour",
+    );
+    return getSignedUrl(
+      this.client,
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ContentType: contentType,
+      }),
+      { expiresIn },
+    );
   }
 
   async probe(): Promise<void> {

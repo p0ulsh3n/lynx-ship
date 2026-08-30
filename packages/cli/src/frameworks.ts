@@ -60,6 +60,10 @@ export async function detectLynxFramework(
     "lynx.config.js",
     "lynx.config.mjs",
     "lynx.config.cjs",
+    "app.config.ts",
+    "app.config.js",
+    "app.config.mjs",
+    "app.config.cjs",
     "octane.config.ts",
     "octane.config.js",
   ];
@@ -128,7 +132,7 @@ export async function detectLynxFramework(
 
   if (
     names.has("@lynx-js/rspeedy") ||
-    /rspeedy|environments\\s*:/i.test(config + scripts)
+    /rspeedy|lynxConfig\s*:|environments\s*:/i.test(config + scripts)
   ) {
     return {
       framework: "vanilla",

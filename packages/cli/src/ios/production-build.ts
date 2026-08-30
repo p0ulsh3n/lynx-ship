@@ -8,10 +8,15 @@ import { loadR2, uploadR2Artifact } from "../r2.js";
 import { nativeArtifactName } from "../artifact-name.js";
 import { commandExists, runProcess } from "../process-runner.js";
 import { buildLynxBundle } from "../bundle-build.js";
+import { loadAppConfig, resolveAppConfigAssetPath } from "../app-config.js";
 
 import type { IosBuildOptions } from "./types.js";
 import { findArchiveApp } from "./simulator.js";
-import { prepareIosAppIcon, syncIosRuntimeResources } from "./assets.js";
+import {
+  prepareIosAppIcon,
+  syncIosBuildResources,
+  syncIosRuntimeResources,
+} from "./assets.js";
 import { runRealIosSimulatorBuild } from "./simulator-build.js";
 import { findProject, installCocoaPods } from "./project.js";
 
@@ -111,6 +116,18 @@ export async function runRealIosBuild(
         miso: options.profile.miso,
       });
     }
+    const appConfig = await loadAppConfig(options.root);
+    const copiedBuildResources = await syncIosBuildResources(
+      options.root,
+      resolveAppConfigAssetPath(
+        options.root,
+        appConfig,
+        "ios",
+        "ios/LynxResources/Assets",
+      ),
+    );
+    for (const name of copiedBuildResources)
+      options.onEvent?.(`Synced ${name} into the iOS native resources`);
     if (ios.bundleScript) {
       step("Syncing bundle into the iOS host…", 8);
       await runProcess(
@@ -123,7 +140,10 @@ export async function runRealIosBuild(
         },
       );
     }
-    const icon = await prepareIosAppIcon(options.root, ios.appIcon);
+    const icon = await prepareIosAppIcon(
+      options.root,
+      ios.appIcon ?? appConfig?.config.appIcon,
+    );
     if (icon) step(`Using iOS app icon: ${icon}`, 9);
     else
       options.onEvent?.(

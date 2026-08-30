@@ -2,12 +2,13 @@ import type { ApiRouteContext } from "../routes.js";
 import { assert } from "@lynxship/contracts";
 
 export function registerTokensRoutes(context: ApiRouteContext): void {
-  const { server, auth, persist, canAccess } = context;
+  const { server, app, auth, persist, canAccess } = context;
   server.post("/v1/tokens", async (request, reply) => {
     const body = request.body as {
       name?: string;
       organizationId?: string;
       projectId?: string;
+      workerId?: string;
       scopes?: string[];
       expiresAt?: string | null;
     };
@@ -19,10 +20,39 @@ export function registerTokensRoutes(context: ApiRouteContext): void {
       "TOKEN_INPUT",
       "Token name and organizationId are required",
     );
+    const identity = context.identityFor(request);
+    if (identity && !identity.scopes.includes("*")) {
+      assert(
+        identity.organizationId === body.organizationId,
+        "FORBIDDEN",
+        "Token organization is outside the authenticated tenant",
+      );
+      if (identity.projectId) {
+        assert(
+          body.projectId === identity.projectId && !body.workerId,
+          "FORBIDDEN",
+          "A project-scoped token can only mint a token for the same project",
+        );
+        assert(
+          !(body.scopes ?? []).some((scope) => scope.startsWith("worker:")),
+          "FORBIDDEN",
+          "A project-scoped token cannot mint worker credentials",
+        );
+      }
+    }
+    if (body.workerId) {
+      const worker = app.workers.get(body.workerId);
+      assert(
+        worker.organizationId === body.organizationId,
+        "WORKER_TOKEN_BINDING",
+        "Worker token organization must match the worker organization",
+      );
+    }
     const token = auth.create({
       name: body.name,
       organizationId: body.organizationId,
       projectId: body.projectId,
+      workerId: body.workerId,
       scopes: body.scopes,
       expiresAt: body.expiresAt,
     });

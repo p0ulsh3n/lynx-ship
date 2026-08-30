@@ -10,6 +10,10 @@ const publicBoundaries = [
   ["packages/notifications/src/index.ts", "client-safe notifications barrel"],
   ["packages/realtime/src/index.ts", "realtime public barrel"],
   ["packages/microhs/src/index.ts", "MicroHs public barrel"],
+  ["packages/framework/src/index.ts", "framework public barrel"],
+  ["packages/navigation/src/index.ts", "navigation public barrel"],
+  ["packages/bridge/src/index.ts", "bridge public barrel"],
+  ["packages/performance/src/index.ts", "performance public barrel"],
 ];
 
 const lineCountBaselines = new Map([

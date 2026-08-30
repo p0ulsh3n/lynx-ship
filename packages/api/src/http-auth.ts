@@ -11,12 +11,20 @@ export function requiredScope(method: string, pathname: string): string | null {
   if (pathname === "/v1/ota/check" || pathname === "/v1/ota/public-key")
     return null;
   if (pathname.startsWith("/v1/tokens")) return "credentials:write";
+  if (pathname.startsWith("/v1/worker-builds/")) return "worker:report";
   if (method === "GET") return "project:read";
+  if (pathname.startsWith("/v1/build-sources")) return "build:write";
   if (pathname.startsWith("/v1/artifacts")) return "build:write";
+  if (pathname.endsWith("/report")) return "worker:report";
   if (pathname.startsWith("/v1/builds")) return "build:write";
   if (pathname.startsWith("/v1/ota")) return "update:write";
   if (pathname.startsWith("/v1/submissions")) return "submit:write";
-  if (pathname.startsWith("/v1/workers")) return "build:write";
+  if (pathname.endsWith("/heartbeat")) return "worker:heartbeat";
+  if (
+    pathname.startsWith("/v1/workers") &&
+    (method !== "GET" || pathname === "/v1/workers")
+  )
+    return "worker:manage";
   if (pathname === "/v1/organizations" || pathname === "/v1/projects")
     return method === "GET" ? "project:read" : "project:write";
   return "project:read";

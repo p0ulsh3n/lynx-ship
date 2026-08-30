@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canonicalize, hashJson } from "@lynxship/contracts";
+import { canonicalize, hashJson, sha256 } from "@lynxship/contracts";
 import { validateConfig, resolveProfile } from "@lynxship/cli/config";
 import {
   assertCompatibleBinaryBuild,
@@ -15,6 +15,11 @@ import {
   runtimeFingerprint,
   BuildCache,
   createSourceManifest,
+  createSourceSnapshot,
+  decodeSourceSnapshot,
+  encodeSourceSnapshot,
+  materializeSourceSnapshot,
+  verifySourceObject,
 } from "@lynxship/build-orchestrator";
 import {
   createSigningKey,
@@ -61,7 +66,14 @@ import {
   validateMigrationNames,
   MigrationTracker,
 } from "@lynxship/db";
-import { access, mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { generateKeyPairSync } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -243,6 +255,15 @@ test("tokens are shown once, scoped and revocable", () => {
       }),
     { code: "TOKEN_EXPIRY" },
   );
+  assert.throws(
+    () =>
+      manager.create({
+        name: "unbound-worker",
+        organizationId: "org",
+        scopes: ["worker:report"],
+      }),
+    { code: "WORKER_TOKEN_BINDING" },
+  );
   assert.deepEqual(scopesForRole("viewer"), ["project:read"]);
 });
 test("build state machine completes and rejects invalid transitions", async () => {
@@ -259,6 +280,27 @@ test("build state machine completes and rejects invalid transitions", async () =
   const result = await service.run(job.id);
   assert.equal(result.state, "success");
   assert.equal(result.transitions.at(-1)?.state, "success");
+});
+test("build worker reports are idempotent across at-least-once retries", async () => {
+  const service = new BuildService();
+  const job = await service.create({
+    projectId: "p",
+    organizationId: "o",
+    platform: "android",
+    profile: "production",
+  });
+  service.report(job.id, { state: "uploading_source" });
+  const first = service.report(job.id, {
+    state: "queued",
+    artifact: { name: "source.tar", hash: "hash-1" },
+  });
+  const transitionCount = first.transitions.length;
+  const retried = service.report(job.id, {
+    state: "queued",
+    artifact: { name: "source.tar", hash: "hash-1" },
+  });
+  assert.equal(retried.transitions.length, transitionCount);
+  assert.equal(retried.artifact?.hash, "hash-1");
 });
 test("build orchestrator never fabricates success without an executor", async () => {
   const service = new BuildService();
@@ -944,6 +986,88 @@ test("source manifests are deterministic and ignore credentials/build outputs", 
     ["main.js"],
   );
   assert.equal(manifest.hash, (await createSourceManifest(root)).hash);
+});
+test("source snapshots are deterministic, content-addressed and materializable", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "lynxship-source-snapshot-"));
+  const target = await mkdtemp(join(tmpdir(), "lynxship-source-target-"));
+  t.after(async () => {
+    await rm(root, { recursive: true, force: true });
+    await rm(target, { recursive: true, force: true });
+  });
+  await mkdir(join(root, "src"));
+  await writeFile(join(root, "src", "index.ts"), "export const answer = 42;\n");
+  await writeFile(join(root, "run.sh"), "#!/bin/sh\nexit 0\n");
+  const first = await createSourceSnapshot(root);
+  const second = await createSourceSnapshot(root);
+  assert.deepEqual(first.bytes, second.bytes);
+  assert.equal(first.reference.hash, second.reference.hash);
+  assert.equal(first.reference.fileCount, 2);
+  assert.deepEqual(decodeSourceSnapshot(first.bytes), first.snapshot);
+  assert.equal(
+    verifySourceObject(first.bytes, first.reference).files.length,
+    2,
+  );
+  const materialized = await materializeSourceSnapshot(
+    first.bytes,
+    first.reference,
+    target,
+  );
+  assert.equal(
+    await readFile(join(materialized.root, "src", "index.ts"), "utf8"),
+    "export const answer = 42;\n",
+  );
+  assert.match(
+    (await readFile(join(materialized.root, "run.sh"))).toString(),
+    /exit 0/,
+  );
+  await assert.rejects(
+    () => materializeSourceSnapshot(first.bytes, first.reference, target),
+    { code: "SOURCE_TARGET_NOT_EMPTY" },
+  );
+});
+test("source snapshots reject secrets, traversal and integrity changes", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "lynxship-source-security-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(join(root, ".env"), "TOKEN=must-not-upload\n");
+  await assert.rejects(() => createSourceSnapshot(root), {
+    code: "SOURCE_SECRET_FILE",
+  });
+  const data = Buffer.from("safe");
+  const file = {
+    path: "safe.txt",
+    hash: sha256(data),
+    size: data.length,
+    mode: 0o644,
+    dataBase64: data.toString("base64"),
+  };
+  const snapshot = {
+    schemaVersion: 1 as const,
+    manifestHash: hashJson([
+      { path: file.path, hash: file.hash, size: file.size, mode: file.mode },
+    ]),
+    files: [file],
+  };
+  const encoded = encodeSourceSnapshot(snapshot);
+  const reference = {
+    key: "sources/" + sha256(encoded),
+    hash: sha256(encoded),
+    size: encoded.length,
+    contentType: "application/vnd.lynxship.source-snapshot+json",
+    fileCount: 1,
+  };
+  assert.throws(
+    () =>
+      encodeSourceSnapshot({
+        ...snapshot,
+        files: [{ ...file, path: "../escape.txt" }],
+      }),
+    { code: "SOURCE_PATH_INVALID" },
+  );
+  const corrupted = Buffer.from(Uint8Array.from(encoded));
+  corrupted[corrupted.length - 1] = corrupted[corrupted.length - 1]! ^ 1;
+  assert.throws(() => verifySourceObject(corrupted, reference), {
+    code: "SOURCE_INTEGRITY",
+  });
 });
 test("rollout health guard pauses and selects the previous release", () => {
   const service = new OtaService();

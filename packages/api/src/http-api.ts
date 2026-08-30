@@ -3,8 +3,9 @@ import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import { TokenManager, type TokenRecord } from "@lynxship/auth";
 import { BuildService } from "@lynxship/build-orchestrator";
-import { LynxShipError } from "@lynxship/contracts";
+import { LynxShipError, type BuildJob } from "@lynxship/contracts";
 import { FileStorage, S3ObjectStorage } from "@lynxship/storage";
+import { sha256 } from "@lynxship/contracts";
 import { createApp, type LynxShipApp, type RuntimeBackends } from "./app.js";
 import {
   authenticateRequest,
@@ -13,7 +14,9 @@ import {
 } from "./http-auth.js";
 import { FixedWindowRateLimiter } from "./services.js";
 import { renderPrometheusMetrics } from "./services/metrics.js";
+import { createBuildSourceStorage } from "./services/source-storage.js";
 import { registerApiRoutes } from "./routes.js";
+import { registerHttpErrorHandler } from "./http-errors.js";
 
 async function storeBuildArtifact(
   runtime: RuntimeBackends | undefined,
@@ -42,6 +45,37 @@ async function storeBuildArtifact(
   }
 }
 
+async function storeWorkerArtifact(
+  runtime: RuntimeBackends | undefined,
+  artifactStore: FileStorage,
+  job: BuildJob,
+  content: Buffer,
+  contentType: string,
+): Promise<NonNullable<BuildJob["artifact"]>> {
+  const hash = sha256(content);
+  const key = `artifacts/${job.projectId}/${job.id}/${hash}`;
+  if (runtime?.storageStore instanceof S3ObjectStorage) {
+    await runtime.storageStore.put(key, content, contentType);
+    return {
+      name: `${job.id}-${job.platform}`,
+      key,
+      hash,
+      size: content.length,
+      contentType,
+      url: await runtime.storageStore.presignGet(key),
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    };
+  }
+  const stored = await artifactStore.put(content, { contentType });
+  return {
+    name: `${job.id}-${job.platform}`,
+    key: stored.key,
+    hash: stored.hash,
+    size: stored.size,
+    contentType: stored.contentType,
+  };
+}
+
 export interface ApiOptions {
   logger?: boolean;
   app?: LynxShipApp;
@@ -67,11 +101,22 @@ export function createApi(options: ApiOptions = {}): FastifyInstance {
     logger: options.logger ?? false,
     bodyLimit: 100 * 1024 * 1024,
   });
+  server.addContentTypeParser(
+    [
+      "application/octet-stream",
+      "application/zip",
+      "application/vnd.android.package-archive",
+      "application/x-apple-diskimage",
+    ],
+    { parseAs: "buffer" },
+    (_request, body, done) => done(null, body),
+  );
   const identities = new WeakMap<object, Omit<TokenRecord, "hash">>();
 
   const persist = async (): Promise<void> => {
     await options.persist?.();
   };
+  const sourceStorage = createBuildSourceStorage(runtime, artifactStore);
 
   server.addHook("onClose", async () => {
     await runtime?.close();
@@ -143,40 +188,7 @@ export function createApi(options: ApiOptions = {}): FastifyInstance {
         (!identity.projectId || identity.projectId === resource.projectId)),
     );
   };
-  server.setErrorHandler((error: unknown, request, reply) => {
-    const typed = error as {
-      code?: string;
-      message?: string;
-      details?: Record<string, unknown>;
-      statusCode?: number;
-      retryAfter?: number;
-    };
-    const authStatus: Record<string, number> = {
-      AUTH_REQUIRED: 401,
-      AUTH_INVALID: 401,
-      AUTH_REVOKED: 401,
-      AUTH_EXPIRED: 401,
-      AUTH_SCOPE: 403,
-      FORBIDDEN: 403,
-      TENANT_SCOPE: 403,
-    };
-    const status =
-      typed.statusCode ??
-      (typed.code ? authStatus[typed.code] : undefined) ??
-      (error instanceof LynxShipError ? 400 : 500);
-    if (status >= 500) request.log.error(error);
-    const headers = typed.retryAfter
-      ? { "retry-after": String(typed.retryAfter) }
-      : undefined;
-    return reply
-      .code(status)
-      .headers(headers ?? {})
-      .send({
-        error: typed.code ?? "INTERNAL_ERROR",
-        message: status >= 500 ? "Internal server error" : typed.message,
-        details: typed.details ?? {},
-      });
-  });
+  registerHttpErrorHandler(server);
   server.get("/", async (_request, reply) => {
     const root = options.dashboardRoot ?? process.cwd();
     const file = join(root, "packages", "dashboard", "dist", "index.html");
@@ -229,6 +241,12 @@ export function createApi(options: ApiOptions = {}): FastifyInstance {
     options,
     allowLocalBuildExecutor,
     storeBuildArtifact,
+    storeBuildSource: sourceStorage.store,
+    loadBuildSource: sourceStorage.load,
+    planBuildSourceUpload: sourceStorage.plan,
+    completeBuildSourceUpload: sourceStorage.complete,
+    storeWorkerArtifact: (job, content, contentType) =>
+      storeWorkerArtifact(runtime, artifactStore, job, content, contentType),
     persist,
     identityFor,
     canAccess,
@@ -254,5 +272,7 @@ export * from "./services.js";
 export * from "@lynxship/build-orchestrator";
 
 export * from "@lynxship/worker-agent";
+
+export * from "@lynxship/worker-service";
 
 export * from "@lynxship/submit";

@@ -134,11 +134,46 @@ export function LynxScreen() {
       style={{ flex: 1 }}
       bundle="main.lynx.bundle"
       initialData="{}"
+      globalProps={{ theme: "dark" }}
+      autoGlobalProps
       reloadOnUpdate
     />
   );
 }
 ```
+
+`globalProps` is passed to `lynx.__globalProps` during the native template
+load. It can also be changed without remounting the React Native screen. The
+native ref exposes the same host controls on Android and iOS:
+
+```tsx
+const viewRef = useRef<LynxViewRef>(null);
+
+viewRef.current?.updateData('{"screen":"inbox"}');
+viewRef.current?.updateGlobalProps({ theme: "light" });
+viewRef.current?.updateGlobalPropsByIncrement({ unreadCount: 3 });
+viewRef.current?.sendGlobalEvent("accountChanged", [{ id: "user-1" }]);
+await viewRef.current?.reload();
+```
+
+`updateData` uses Lynx's official host-data update API and accepts a JSON
+string up to 8 MiB without remounting the view. Its optional second argument
+selects a registered Lynx data processor. `show`, `hide` and
+`updateViewport({ width, height })` are also available.
+`updateGlobalPropsByIncrement` applies only the supplied keys and is useful for
+small host-state changes; `updateGlobalProps` remains the full replacement API.
+The ref also exposes `getContainerId()`, `getLoadState()` and
+`isLoadSuccess()`, matching the native container state contract without
+requiring a React remount.
+The viewport is updated automatically from the native view layout, so the
+usual `style={{ flex: 1 }}` remains the recommended layout. The native view
+owns the Lynx lifecycle and is destroyed when Expo releases the view; this
+prevents an old page/runtime from surviving React reconciliation.
+
+The view also exposes lifecycle events that can drive application-owned UI:
+`onLoadStart`, `onResourceFetchStart`, `onLoadSuccess`, `onReady` (first screen), `onError`, `onUpdate` (OTA or non-remounting data update),
+`onShow` and `onHide`. The events are notifications only; they do not replace
+the native permission, navigation or OTA policy owned by the host.
 
 The native module initializes Lynx, creates the official `LynxView`, and
 provides a template provider. The provider first reads the verified active OTA
@@ -190,8 +225,13 @@ the provider is the integration point for the LynxShip OTA cache.
 
 References:
 
-- [Lynx integration with existing apps](https://lynxjs.org/3.8/guide/start/integrate-with-existing-apps.html)
+- [Lynx/Rspeedy existing-app integration](https://lynxjs.org/next/rspeedy/start/integrate-with-existing-apps)
+- [Lynx native `LynxView` API](https://lynxjs.org/next/api/lynx-native-api/lynx-view/lynx-view.html)
+- [Lynx global props](https://lynxjs.org/next/api/lynx-api/lynx/lynx-global-props.html)
+- [Lynx global events](https://lynxjs.org/next/api/lynx-native-api/lynx-view/send-global-event.html)
+- [Lynx native viewport API](https://lynxjs.org/next/api/lynx-native-api/lynx-view/update-viewport.html)
 - [Expo native view modules](https://docs.expo.dev/modules/native-view-tutorial/)
+- [Expo view refs and async functions](https://docs.expo.dev/modules/module-api/)
 - [Expo module configuration](https://docs.expo.dev/modules/module-config/)
 - [LynxShip OTA security and compatibility](../../docs/compatibility.md)
 

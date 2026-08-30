@@ -7,6 +7,7 @@ import com.lynxship.devicestorage.LynxShipDeviceStorageModule;
 import com.lynxship.permissions.LynxShipPermissionsModule;
 import com.lynxship.media.LynxShipMediaModule;
 import com.lynxship.notifications.LynxShipNotificationsModule;
+import com.lynxship.navigation.LynxShipNavigationModule;
 
 public final class LynxShipApplication extends Application {
     @Override
@@ -17,5 +18,6 @@ public final class LynxShipApplication extends Application {
         LynxEnv.inst().registerModule("LynxShipPermissions", LynxShipPermissionsModule.class);
         LynxEnv.inst().registerModule("LynxShipMedia", LynxShipMediaModule.class);
         LynxEnv.inst().registerModule("LynxShipNotifications", LynxShipNotificationsModule.class);
+        LynxEnv.inst().registerModule("LynxShipNavigation", LynxShipNavigationModule.class);
     }
 }

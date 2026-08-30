@@ -15,6 +15,7 @@ import { loadR2, uploadR2Artifact } from "./r2.js";
 import { nativeArtifactName } from "./artifact-name.js";
 import { runProcess } from "./process-runner.js";
 import { buildLynxBundle } from "./bundle-build.js";
+import { loadAppConfig, resolveAppConfigAssetPath } from "./app-config.js";
 
 import type { AndroidBuildOptions } from "./android/types.js";
 import {
@@ -50,9 +51,14 @@ export function isSupportedAndroidPlatform(): boolean {
  * project to carry a helper script. Rspeedy writes bundles and static assets
  * to `dist`, while the Lynx Android host reads them from `app/src/main/assets`.
  */
-export async function syncLynxAssets(root: string): Promise<string[]> {
+export async function syncLynxAssets(
+  root: string,
+  options: { destination?: string } = {},
+): Promise<string[]> {
   const distRoot = join(root, "dist");
-  const assetsRoot = join(root, "android", "app", "src", "main", "assets");
+  const assetsRoot =
+    options.destination ??
+    join(root, "android", "app", "src", "main", "assets");
   let entries;
 
   try {
@@ -149,11 +155,18 @@ export async function runRealAndroidBuild(
       "syncing Lynx bundle into Android assets",
     );
     step("Syncing bundle into the Android host…");
-    const copiedAssets = await syncLynxAssets(options.root);
+    const appConfig = await loadAppConfig(options.root);
+    const assetsRoot = resolveAppConfigAssetPath(
+      options.root,
+      appConfig,
+      "android",
+      "android/app/src/main/assets",
+    );
+    const copiedAssets = await syncLynxAssets(options.root, {
+      destination: assetsRoot,
+    });
     for (const name of copiedAssets) {
-      options.onEvent?.(
-        `Synced dist/${name} -> android/app/src/main/assets/${name}`,
-      );
+      options.onEvent?.(`Synced dist/${name} -> ${assetsRoot}/${name}`);
     }
     step("Android host synchronized", 40);
 

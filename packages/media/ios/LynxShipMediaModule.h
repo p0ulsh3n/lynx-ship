@@ -7,4 +7,5 @@
 @interface LynxShipMediaModule : NSObject <UIImagePickerControllerDelegate, UINavigationControllerDelegate, PHPickerViewControllerDelegate>
 - (void)startRecording:(void (^)(BOOL started))callback;
 - (void)stopRecording:(void (^)(NSString *uri))callback;
+- (void)chooseMedia:(NSString *)request callback:(void (^)(NSString *result))callback;
 @end

@@ -4,6 +4,8 @@ import {
   type MediaClient,
   type MediaKind,
 } from "./contracts.js";
+import { createMediaTransferMethods } from "./transfer.js";
+import { createMediaSelectionMethods } from "./selection.js";
 
 export function createMediaClient(adapter: MediaAdapter): MediaClient {
   const requireCapability = (
@@ -38,6 +40,7 @@ export function createMediaClient(adapter: MediaAdapter): MediaClient {
         throw new MediaCapabilityError("The host did not provide pick().");
       return adapter.pick(options);
     },
+    ...createMediaSelectionMethods(adapter),
     startRecording: async () => {
       requireCapability("microphone", "capture");
       if (!adapter.startRecording)
@@ -54,5 +57,6 @@ export function createMediaClient(adapter: MediaAdapter): MediaClient {
         );
       return adapter.stopRecording();
     },
+    ...createMediaTransferMethods(adapter),
   };
 }

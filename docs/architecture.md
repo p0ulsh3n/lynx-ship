@@ -12,10 +12,29 @@ Lynx project ──> Rspeedy bundle ──> native host or web/desktop adapter
 CLI ──HTTP/API──> API (Fastify)       │   optional runtime packages
                     │                 ├─ @lynxship/expo / SDKs / OTA
        auth / build-orchestrator       ├─ @lynxship/lynx-realtime
-       submit / worker-agent           └─ @lynxship/notifications
+       submit / worker-agent / worker-service
+                                      └─ @lynxship/notifications
                     │
        db / queue / storage / signing / build-providers
 ```
+
+The framework runtime boundary is intentionally host-neutral:
+
+```text
+createFramework(platform, container, capabilities)
+          │
+          ├─ capability registry and compatibility checks
+          ├─ bundle mount/update contract
+          └─ lifecycle: resolving → verified → mounting → first-screen → interactive
+                 │
+                 └─ explicit Android/iOS/Harmony/web/desktop container adapter
+```
+
+`@lynxship/framework` does not create a fake LynxView, download an artifact, or
+reach into a native SDK. The host adapter owns those effects and reports the
+real first-screen promise. This keeps the framework usable by native Lynx hosts,
+Expo modules, Lynxtron and future adapters without making the portable core
+depend on a platform.
 
 `packages/contracts` contains shared DTOs and public domain types only. The
 dashboard is a React/Vite client of the `/v1` API; it does not contain server
@@ -84,6 +103,13 @@ packages/api/src/
 └─ services/              audit, credentials, devices, metrics, providers,
                           rate limits, telemetry, usage and webhooks
 
+packages/worker-service/src/
+├─ index.ts                 hosted-worker compatibility barrel
+├─ contracts.ts             immutable work, reporter and executor contracts
+├─ validation.ts            payload, tenant and platform validation
+├─ reporter.ts              bounded HTTPS control-plane transport
+└─ service.ts               heartbeat, dispatch and failure lifecycle
+
 packages/notifications/src/
 ├─ client.ts              client-safe registration and catch-up primitives
 ├─ expo.ts / lynx.ts      framework adapters
@@ -127,7 +153,10 @@ packages/sdk-android/src/main/java/com/lynxship/sdk/android/
 ├─ OtaStateStore.java     atomic OTA activation-state persistence
 ├─ OtaFiles.java          bounded file and byte-stream operations
 ├─ OtaSecurity.java      HTTPS, path, manifest and Ed25519 verification
-└─ OtaSerialization.java deterministic staged-release serialization
+├─ OtaSerialization.java deterministic staged-release serialization
+├─ LynxShipContainerView.java reusable native Lynx container
+├─ LynxShipContainerAssetLoader.java injected bundle source
+└─ LynxShipContainerListener.java lifecycle callbacks
 
 packages/realtime/src/
 ├─ index.ts               public barrel
@@ -146,6 +175,44 @@ packages/realtime/src/
 ├─ receipts.ts            delivered/read receipts
 ├─ activity-stack.ts      bounded banner queue
 └─ react-lynx-banners.tsx ReactLynx presentation adapter
+
+packages/framework/src/
+├─ index.ts                  public compatibility barrel
+├─ framework.ts              lifecycle facade and dependency injection boundary
+├─ config/                   unified app config contracts and pure validation
+├─ contracts/platform.ts     platform identifiers and framework errors
+├─ capabilities/registry.ts capability registration and compatibility checks
+├─ container/contracts.ts    host container prepare/mount/update contract
+├─ container/runtime.ts      serialized prepare/reload, props, events and viewport facade
+├─ container/presentation.ts toolkit-neutral loading/error/retry UI state
+├─ container/validation.ts   bundle and container input validation
+├─ container/global-props.ts standard OS, layout, safe-area and lifecycle context
+├─ lifecycle/machine.ts      pure lifecycle state machine
+└─ lifecycle/async.ts        serialized operations and abort/timeout waiting
+
+packages/navigation/src/
+├─ index.ts          public compatibility barrel
+├─ contracts.ts      adapter, target and event contracts
+├─ policy.ts         URL normalization and allowlist validation
+├─ controller.ts     injected-adapter navigation lifecycle
+└─ errors.ts         typed public errors
+
+packages/bridge/src/
+├─ index.ts       public compatibility barrel
+├─ contracts.ts   transport, method, response and event contracts
+├─ validation.ts  method, event, options and payload validation
+├─ client.ts      allowlisted invocation, retry and timeout lifecycle
+├─ lynx.ts        Android/iOS Lynx transport and response decoding
+├─ typed.ts       typed method and event facades
+├─ method-package.ts reusable community method packages
+└─ errors.ts      typed public errors
+
+packages/performance/src/
+├─ index.ts       public compatibility barrel
+├─ contracts.ts   entries, sources, sinks and collector API
+├─ validation.ts  entry and retention-limit validation
+├─ collector.ts   bounded collection, marks, measures and flushing
+└─ errors.ts      typed public errors
 ```
 
 Entrypoint files are deliberately thin barrels or lifecycle adapters. New
@@ -188,6 +255,10 @@ directly to R2, and sends only immutable artifact metadata plus a temporary
 download URL to the API. The API persists control-plane state in PostgreSQL
 and queues build IDs in Redis Streams. Consumer groups provide at-least-once
 delivery; workers acknowledge completed messages atomically and abandoned
-pending messages can be reclaimed after a lease timeout. Cloud execution,
-worker isolation and production backup procedures remain separate acceptance
-gates.
+pending messages can be reclaimed after a lease timeout. The worker service
+validates each immutable envelope against the authoritative build record,
+binds it to one organization and platform, delegates real stages to an
+injected executor, and reports through an authenticated HTTPS client. It does
+not invent lifecycle states, run arbitrary commands or provision machines.
+Cloud execution, worker isolation and production backup procedures remain
+separate acceptance gates.

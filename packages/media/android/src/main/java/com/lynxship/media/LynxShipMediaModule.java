@@ -60,6 +60,15 @@ public final class LynxShipMediaModule extends LynxModule {
     }
 
     @LynxMethod
+    public void chooseMedia(String request, Callback callback) {
+        if (request == null || request.length() > 16 * 1024) {
+            callback.invoke("{\"code\":0,\"msg\":\"Invalid media selection request.\"}");
+            return;
+        }
+        launch("chooseMedia", "", request, callback, false);
+    }
+
+    @LynxMethod
     public void capture(String kind, Callback callback) {
         if (!"camera".equals(kind) && !"microphone".equals(kind)) { callback.invoke(""); return; }
         String permission = permissionFor(kind);
@@ -92,6 +101,10 @@ public final class LynxShipMediaModule extends LynxModule {
     }
 
     private void launch(String mode, String kind, Callback callback, boolean permission) {
+        launch(mode, kind, null, callback, permission);
+    }
+
+    private void launch(String mode, String kind, String request, Callback callback, boolean permission) {
         if (callback == null) return;
         if (pendingCallback != null) { callback.invoke(permission ? false : ""); return; }
         String requestId = java.util.UUID.randomUUID().toString();
@@ -117,6 +130,7 @@ public final class LynxShipMediaModule extends LynxModule {
                     .putExtra("mode", mode)
                     .putExtra("kind", kind)
                     .putExtra(LynxShipMediaContract.EXTRA_REQUEST_ID, requestId);
+            if (request != null) intent.putExtra("request", request);
             if (!(moduleContext instanceof Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             moduleContext.startActivity(intent);
         } catch (RuntimeException error) {

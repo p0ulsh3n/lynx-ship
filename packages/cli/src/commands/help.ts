@@ -24,9 +24,9 @@ Commands:
   logs                    Stream Android/iOS/HarmonyOS native logs
   build create            Create a local/cloud build job
   build list              List build jobs
-  build status <id>       Show one build job
-  build cancel <id>       Cancel a build job
-  build retry <id>        Retry a failed build job
+  build status <id>       Show one build job (add --remote for hosted builds)
+  build cancel <id>       Cancel a build job (add --remote for hosted builds)
+  build retry <id>        Retry a failed build job (add --remote for hosted builds)
   build all               Build Android, iOS, HarmonyOS, Web and Desktop
   submit                  Submit the latest successful build
   update                  Upload and publish a signed OTA update
@@ -43,6 +43,7 @@ Build options:
   --platform <p>          Target android, ios, harmony, web, desktop or all (default: android)
   --profile <name>        Build profile (default: production; simulator uses simulator)
   --no-wait               Queue the build without executing it locally
+  --remote                Upload a verified source snapshot and queue a hosted build
   --no-upload              Keep the artifact local and skip R2 (CI verification)
   --simulator             Build and install an iOS Simulator .app locally
   --device <id>           Select the iOS Simulator device for a simulator build

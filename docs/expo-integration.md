@@ -131,7 +131,7 @@ that an Android or iOS native binary compiled.
 This integration follows the official documentation rather than inventing a
 second Lynx runtime or native registry:
 
-- [Lynx brownfield integration](https://lynxjs.org/3.8/guide/start/integrate-with-existing-apps.html)
+- [Lynx/Rspeedy existing-app integration](https://lynxjs.org/next/rspeedy/start/integrate-with-existing-apps)
 - [Lynx Autolink](https://lynxjs.org/guide/autolink)
 - [Expo Modules native view](https://docs.expo.dev/modules/native-view-tutorial/)
 - [Expo module configuration](https://docs.expo.dev/modules/module-config/)

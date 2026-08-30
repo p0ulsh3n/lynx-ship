@@ -14,6 +14,9 @@ const roleScopes: Record<Role, Set<string>> = {
     "project:read",
     "project:write",
     "build:write",
+    "worker:manage",
+    "worker:heartbeat",
+    "worker:report",
     "submit:write",
     "update:write",
     "credentials:write",
@@ -58,6 +61,8 @@ export interface TokenRecord {
   name: string;
   organizationId: string;
   projectId: string | null;
+  /** Optional binding that restricts a machine token to one registered worker. */
+  workerId?: string | null;
   scopes: string[];
   hash: string;
   expiresAt: string | null;
@@ -86,6 +91,7 @@ export class TokenManager {
     name: string;
     organizationId: string;
     projectId?: string;
+    workerId?: string;
     scopes?: string[];
     expiresAt?: string | null;
   }) {
@@ -104,6 +110,9 @@ export class TokenManager {
           "project:read",
           "project:write",
           "build:write",
+          "worker:manage",
+          "worker:heartbeat",
+          "worker:report",
           "submit:write",
           "update:write",
           "credentials:write",
@@ -117,11 +126,22 @@ export class TokenManager {
       "TOKEN_SCOPE",
       "Wildcard scope is reserved for the server bootstrap token",
     );
+    if (
+      (scopes.includes("worker:heartbeat") ||
+        scopes.includes("worker:report")) &&
+      !scopes.includes("worker:manage")
+    )
+      assert(
+        typeof input.workerId === "string" && input.workerId.length > 0,
+        "WORKER_TOKEN_BINDING",
+        "Worker heartbeat and report tokens must be bound to a worker",
+      );
     this.tokens.set(id, {
       id,
       name: input.name,
       organizationId: input.organizationId,
       projectId: input.projectId ?? null,
+      workerId: input.workerId ?? null,
       scopes,
       hash: digest(value),
       expiresAt: validExpiry(input.expiresAt),
@@ -134,6 +154,7 @@ export class TokenManager {
       name: input.name,
       organizationId: input.organizationId,
       projectId: input.projectId ?? null,
+      workerId: input.workerId ?? null,
       scopes,
       expiresAt: input.expiresAt ?? null,
     };
@@ -153,6 +174,7 @@ export class TokenManager {
       name: input.name ?? "environment",
       organizationId: input.organizationId ?? "environment",
       projectId: null,
+      workerId: null,
       scopes: [...new Set(input.scopes ?? ["*"])],
       hash: digest(input.value),
       expiresAt: null,
@@ -197,9 +219,7 @@ export class TokenManager {
       "Token is not authorized for this project",
     );
     assert(
-      !input.requiredScope ||
-        token.scopes.includes("*") ||
-        token.scopes.includes(input.requiredScope),
+      !input.requiredScope || hasScope(token.scopes, input.requiredScope),
       "AUTH_SCOPE",
       `Missing scope: ${input.requiredScope}`,
     );
@@ -217,6 +237,14 @@ export class TokenManager {
   list() {
     return [...this.tokens.values()].map(({ hash: _hash, ...token }) => token);
   }
+}
+
+function hasScope(scopes: readonly string[], required: string): boolean {
+  if (scopes.includes("*") || scopes.includes(required)) return true;
+  return (
+    scopes.includes("worker:manage") &&
+    (required === "worker:heartbeat" || required === "worker:report")
+  );
 }
 
 export function scopesForRole(role: Role): string[] {

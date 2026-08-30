@@ -1,0 +1,2 @@
+-keep class com.lynxship.navigation.LynxShipNavigationModule { *; }
+-keep @interface com.lynx.jsbridge.LynxMethod

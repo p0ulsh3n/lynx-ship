@@ -9,4 +9,6 @@ export * from "@lynxship/build-orchestrator";
 
 export * from "@lynxship/worker-agent";
 
+export * from "@lynxship/worker-service";
+
 export * from "@lynxship/submit";

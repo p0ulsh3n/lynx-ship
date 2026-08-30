@@ -60,6 +60,7 @@ export interface BuildJob {
   profile: string;
   idempotencyKey?: string | null;
   sourceHash: string | null;
+  source?: BuildSourceReference;
   runtimeVersion?: string;
   runtimeInputs?: Record<string, unknown>;
   state: BuildState;
@@ -76,6 +77,14 @@ export interface BuildJob {
     url?: string;
     expiresAt?: string;
   };
+}
+
+export interface BuildSourceReference {
+  key: string;
+  hash: string;
+  size: number;
+  contentType: string;
+  fileCount: number;
 }
 
 export interface BuildResult {

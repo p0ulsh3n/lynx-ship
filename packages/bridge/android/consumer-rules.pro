@@ -1,0 +1,3 @@
+-keep @interface com.lynx.jsbridge.LynxMethod
+-keep @com.lynx.jsbridge.LynxMethod class * { *; }
+-keep class com.lynxship.bridge.** { *; }

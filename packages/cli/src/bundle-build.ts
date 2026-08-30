@@ -9,6 +9,8 @@ import {
   runRspeedy,
 } from "./process-runner.js";
 import { detectLynxFramework } from "./frameworks.js";
+import { loadAppConfig } from "./app-config.js";
+import { buildRspeedyAppConfig } from "./rspeedy-app-config.js";
 
 interface PackageManifest {
   scripts?: Record<string, string>;
@@ -198,6 +200,15 @@ export async function buildLynxBundle(
       options.onOutput,
     );
     return;
+  }
+  if (!options.script && !options.rspeedyArgs) {
+    const appConfig = await loadAppConfig(root, { required: false });
+    if (appConfig) {
+      options.onOutput?.(`Building Rspeedy from ${appConfig.path}`);
+      await buildRspeedyAppConfig(root, appConfig);
+      options.onOutput?.("Rspeedy app.config bundle ready");
+      return;
+    }
   }
   if (!options.script && options.rspeedyArgs) {
     await runRspeedy(root, "build", options.rspeedyArgs, {

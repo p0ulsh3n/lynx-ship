@@ -1,18 +1,28 @@
 import Foundation
 
 class DemoLynxProvider: NSObject, LynxTemplateProvider {
+  private let onError: (Error) -> Void
+
+  init(onError: @escaping (Error) -> Void) {
+    self.onError = onError
+  }
+
   func loadTemplate(withUrl url: String!, onComplete callback: LynxTemplateLoadBlock!) {
-    if let filePath = Bundle.main.path(forResource: url, ofType: "bundle") {
+    let requestedURL = url ?? ""
+    DispatchQueue.global(qos: .userInitiated).async { [onError] in
+      guard let filePath = Bundle.main.path(forResource: requestedURL, ofType: "bundle")
+        ?? Bundle.main.path(forResource: requestedURL, ofType: nil) else {
+        let urlError = NSError(domain: "com.lynx", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid URL."])
+        onError(urlError)
+        callback(nil, urlError)
+        return
+      }
       do {
-        let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
-        callback(data, nil)
+        callback(try Data(contentsOf: URL(fileURLWithPath: filePath)), nil)
       } catch {
-        print("Error reading file: \(error.localizedDescription)")
+        onError(error)
         callback(nil, error)
       }
-    } else {
-      let urlError = NSError(domain: "com.lynx", code: 400, userInfo: [NSLocalizedDescriptionKey: "Invalid URL."])
-      callback(nil, urlError)
     }
   }
 }

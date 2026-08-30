@@ -168,6 +168,33 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
           popd
+      - name: Compile the reusable LynxShip iOS container pod
+        shell: bash
+        run: |
+          pod lib lint packages/sdk-ios/lynxship-ota.podspec \
+            --allow-warnings \
+            --skip-tests \
+            --no-repo-update \
+            --no-clean \
+            --verbose
+      - name: Compile the LynxShip iOS navigation pod
+        shell: bash
+        run: |
+          pod lib lint packages/navigation/ios/lynxship-navigation.podspec \
+            --allow-warnings \
+            --skip-tests \
+            --no-repo-update \
+            --no-clean \
+            --verbose
+      - name: Compile the LynxShip iOS media pod
+        shell: bash
+        run: |
+          pod lib lint packages/media/ios/lynxship-media.podspec \
+            --allow-warnings \
+            --skip-tests \
+            --no-repo-update \
+            --no-clean \
+            --verbose
       - name: Install dependencies
         shell: bash
         run: |

@@ -103,6 +103,7 @@ dependencies {
     implementation project(":lynxship-permissions")
     implementation project(":lynxship-media")
     implementation project(":lynxship-notifications")
+    implementation project(":lynxship-navigation")
     implementation "androidx.annotation:annotation:1.10.0"
     implementation "org.lynxsdk.lynx:lynx:4.0.0"
     implementation "org.lynxsdk.lynx:lynx-jssdk:4.0.0"

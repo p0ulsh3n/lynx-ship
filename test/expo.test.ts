@@ -122,6 +122,64 @@ test("Expo package contains both native autolink registrations", async () => {
     androidView,
     /LynxViewBuilder\(\)\.setTemplateProvider\(templateProvider\)\.build\(context\)/,
   );
+  assert.match(androidView, /LynxLoadMeta\.Builder\(\)/);
+  assert.match(
+    androidView,
+    /setGlobalProps\(TemplateData\.fromMap\(effectiveGlobalProps\(\)\)\)/,
+  );
+  assert.match(androidView, /autoGlobalProps/);
+  assert.match(androidView, /containerID/);
+  assert.match(androidView, /safeAreaInsets/);
+  assert.match(androidView, /onWindowVisibilityChanged/);
+  assert.match(androidView, /onEnterForeground\(\)/);
+  assert.match(androidView, /onEnterBackground\(\)/);
+  assert.match(androidView, /getContainerId/);
+  assert.match(androidView, /onResourceFetchStart/);
+  assert.match(androidView, /isLowPowerMode/);
+  assert.match(androidView, /isNotchScreen/);
+  assert.match(androidView, /getLoadState/);
+  assert.match(androidView, /isLoadSuccess/);
+  assert.match(androidView, /sendGlobalEvent\(/);
+  assert.match(androidView, /updateGlobalPropsByIncrement/);
+  assert.match(androidView, /LynxUpdateMeta\.Builder\(\)/);
+  assert.match(androidView, /updateMetaData\(/);
+  assert.match(androidView, /templateData::markState/);
+  assert.match(androidView, /updateViewport\(/);
+  assert.match(androidView, /destroy\(\)/);
+  const androidModule = await readFile(
+    join(
+      root,
+      "android",
+      "src",
+      "main",
+      "java",
+      "com",
+      "lynxship",
+      "expo",
+      "LynxShipExpoModule.kt",
+    ),
+    "utf8",
+  );
+  assert.match(androidModule, /AsyncFunction\("updateGlobalProps"\)/);
+  assert.match(
+    androidModule,
+    /AsyncFunction\("updateGlobalPropsByIncrement"\)/,
+  );
+  assert.match(androidModule, /AsyncFunction\("getContainerId"\)/);
+  assert.match(androidModule, /AsyncFunction\("getLoadState"\)/);
+  assert.match(androidModule, /AsyncFunction\("isLoadSuccess"\)/);
+  assert.match(androidModule, /AsyncFunction\("updateData"\)/);
+  assert.match(androidModule, /AsyncFunction\("sendGlobalEvent"\)/);
+  assert.match(androidModule, /OnViewDestroys/);
+  for (const event of [
+    "onLoadStart",
+    "onResourceFetchStart",
+    "onLoadSuccess",
+    "onShow",
+    "onHide",
+  ]) {
+    assert.match(androidModule, new RegExp(event));
+  }
   assert.doesNotMatch(
     androidView,
     /expo\.modules\.kotlin\.events\.EventDispatcher/,
@@ -133,6 +191,52 @@ test("Expo package contains both native autolink registrations", async () => {
     await readFile(join(root, "android", "consumer-rules.pro"), "utf8"),
     /CalledByNative/,
   );
+  const iosView = await readFile(
+    join(root, "ios", "LynxShipExpoView.swift"),
+    "utf8",
+  );
+  assert.match(iosView, /LynxViewLifecycle/);
+  assert.match(iosView, /lynxViewDidFirstScreen/);
+  assert.match(iosView, /addLifecycleClient\(lifecycleClient\)/);
+  assert.match(iosView, /updateGlobalProps\(withDictionary:/);
+  assert.match(iosView, /autoGlobalProps/);
+  assert.match(iosView, /onEnterForeground\(\)/);
+  assert.match(iosView, /onEnterBackground\(\)/);
+  assert.match(iosView, /getContainerId/);
+  assert.match(iosView, /onResourceFetchStart/);
+  assert.match(iosView, /isLowPowerMode/);
+  assert.match(iosView, /isNotchScreen/);
+  assert.match(iosView, /getLoadState/);
+  assert.match(iosView, /isLoadSuccess/);
+  assert.match(iosView, /containerID/);
+  assert.match(iosView, /safeAreaInsets/);
+  assert.match(iosView, /sendGlobalEvent\(eventName, withParams:/);
+  assert.match(iosView, /updateGlobalPropsByIncrement/);
+  assert.match(iosView, /updateData\(withString:/);
+  assert.match(iosView, /markState\(processorName\)/);
+  assert.match(iosView, /updateViewport\(withPreferredLayoutWidth:/);
+  assert.match(iosView, /lynxView\.destroy\(\)/);
+  const iosModule = await readFile(
+    join(root, "ios", "LynxShipExpoModule.swift"),
+    "utf8",
+  );
+  for (const event of [
+    "onLoadStart",
+    "onResourceFetchStart",
+    "onLoadSuccess",
+    "onShow",
+    "onHide",
+  ]) {
+    assert.match(iosModule, new RegExp(event));
+  }
+  assert.match(iosModule, /AsyncFunction\("updateGlobalProps"\)/);
+  assert.match(iosModule, /AsyncFunction\("updateGlobalPropsByIncrement"\)/);
+  assert.match(iosModule, /AsyncFunction\("getContainerId"\)/);
+  assert.match(iosModule, /AsyncFunction\("getLoadState"\)/);
+  assert.match(iosModule, /AsyncFunction\("isLoadSuccess"\)/);
+  assert.match(iosModule, /AsyncFunction\("updateData"\)/);
+  assert.match(iosModule, /AsyncFunction\("sendGlobalEvent"\)/);
+  assert.doesNotMatch(iosView, /onLoaded/);
 });
 
 test("Element PAPI demo keeps stable references for nested text nodes", async () => {

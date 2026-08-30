@@ -191,6 +191,9 @@ importers:
       '@lynxship/worker-agent':
         specifier: workspace:*
         version: link:../worker-agent
+      '@lynxship/worker-service':
+        specifier: workspace:*
+        version: link:../worker-service
       fastify:
         specifier: ^5.4.0
         version: 5.12.1
@@ -202,6 +205,12 @@ importers:
       '@lynxship/contracts':
         specifier: workspace:*
         version: link:../contracts
+
+  packages/bridge:
+    devDependencies:
+      '@lynx-js/autolink-codegen':
+        specifier: 0.4.1
+        version: 0.4.1
 
   packages/build-orchestrator:
     dependencies:
@@ -235,6 +244,9 @@ importers:
       '@lynxship/db':
         specifier: workspace:*
         version: link:../db
+      '@lynxship/framework':
+        specifier: workspace:*
+        version: link:../framework
       '@lynxship/i18n':
         specifier: workspace:*
         version: link:../i18n
@@ -262,6 +274,9 @@ importers:
       cli-progress:
         specifier: 3.12.0
         version: 3.12.0
+      jiti:
+        specifier: 2.7.0
+        version: 2.7.0
       jsdom:
         specifier: 29.1.1
         version: 29.1.1
@@ -391,6 +406,8 @@ importers:
         specifier: 57.0.13
         version: 57.0.13(react-native@0.87.0(@babel/core@7.29.7(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8)
 
+  packages/framework: {}
+
   packages/i18n:
     devDependencies:
       '@lynx-js/react':
@@ -411,6 +428,16 @@ importers:
         version: 0.4.1
 
   packages/microhs: {}
+
+  packages/navigation:
+    dependencies:
+      '@lynxship/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@lynx-js/autolink-codegen':
+        specifier: 0.4.1
+        version: 0.4.1
 
   packages/notifications:
     dependencies:
@@ -435,6 +462,8 @@ importers:
         version: 8.23.0
 
   packages/observability: {}
+
+  packages/performance: {}
 
   packages/permissions:
     devDependencies:
@@ -484,6 +513,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 3.1116.0
         version: 3.1116.0
+      '@aws-sdk/s3-request-presigner':
+        specifier: 3.1116.0
+        version: 3.1116.0
       '@lynxship/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -520,6 +552,39 @@ importers:
       '@lynxship/contracts':
         specifier: workspace:*
         version: link:../contracts
+
+  packages/worker-runtime:
+    dependencies:
+      '@lynxship/cli':
+        specifier: workspace:*
+        version: link:../cli
+      '@lynxship/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@lynxship/queue':
+        specifier: workspace:*
+        version: link:../queue
+      '@lynxship/worker-agent':
+        specifier: workspace:*
+        version: link:../worker-agent
+      '@lynxship/worker-service':
+        specifier: workspace:*
+        version: link:../worker-service
+
+  packages/worker-service:
+    dependencies:
+      '@lynxship/build-orchestrator':
+        specifier: workspace:*
+        version: link:../build-orchestrator
+      '@lynxship/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@lynxship/queue':
+        specifier: workspace:*
+        version: link:../queue
+      '@lynxship/worker-agent':
+        specifier: workspace:*
+        version: link:../worker-agent
 
 packages:
 

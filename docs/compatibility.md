@@ -53,7 +53,85 @@ This follows Lynx's native library/autolink model and its Native Modules
 boundary; the CLI uses the package manifest as build input and does not attempt
 to move native executable code through OTA. See the official
 [Lynx native library and autolink guide](https://lynxjs.org/guide/autolink) and
-[Native Modules guide](https://lynxjs.org/3.6/guide/use-native-modules.html).
+[Native Modules guide](https://lynxjs.org/next/guide/use-native-modules.html).
+
+The public framework layer is split into three host-neutral contracts:
+`@lynxship/framework` coordinates container lifecycle and first-screen
+readiness, `@lynxship/navigation` delegates validated routes to the native
+stack, and `@lynxship/bridge` delegates only allow-listed JS-to-native calls.
+None of these packages replaces the official Lynx host or silently creates a
+platform implementation.
+
+The native SDKs now also expose reusable Android and iOS
+`LynxShipContainerView` implementations. They use an injected bundle loader,
+so verified OTA assets and embedded bundles share the same load lifecycle. The
+SDKs do not silently choose a network source, navigation stack or privacy
+policy; those remain explicit host dependencies.
+
+Both native container SDKs also expose an explicit `prepare` operation. It
+loads one verified bundle source without mounting or presenting a view and uses
+a bounded in-memory cache for the next load. This is a source-preparation
+optimization, not permission to bypass the host's authentication, signature or
+persistent-cache policy.
+
+Runtime global-props changes also expose an explicit incremental operation,
+`updateGlobalPropsByIncrement`, backed by Lynx's native global-props update
+primitive. Existing `updateGlobalProps` callers remain compatible and use the
+incremental operation when the adapter provides it.
+
+`updateData` is also available on the portable container and Expo ref. Android
+uses `LynxUpdateMeta.Builder`/`updateMetaData`, while iOS uses Lynx's official
+`updateDataWithString:` API. Both paths update host-provided `initData` without
+remounting and enforce an 8 MiB input limit.
+
+Native containers expose a stable per-instance identifier and a load-success
+predicate tied to Lynx's first-screen callback, so hosts can correlate
+telemetry and avoid treating a merely started load as usable content.
+
+The container contract also carries validated presentation hints for full-page
+or embedded hosts: kind, title, system-bar policy, theme, background and
+intrinsic content mode. Native hosts remain responsible for applying those
+hints to their own Activity, UIViewController or equivalent container. Hosts
+may expose a live intrinsic-size subscription for embedded content; the runtime
+validates every update and removes the subscription during reload or unmount.
+
+Navigation exposes a read-only logical stack after native transitions succeed,
+with push/replace/pop semantics for multi-page flows. The native adapter remains
+the authority for the actual Activity, UIViewController or router transition.
+On Android, applications can additionally opt into the modern predictive-back
+callback and receive `lynxship:navigation-back-press` before confirming a
+navigation in Lynx; disabling the option restores normal platform behavior.
+It also exposes optional non-presenting `create` and HTTPS-only
+`openInSystemBrowser` operations, matching the native container/router boundary
+without pretending that an unsupported host succeeded.
+For a direct full-page workflow, the Android/iOS navigation packages also ship
+a non-exported default page host for validated local-bundle schemes. An
+application-owned `LynxShipNavigationHost` remains authoritative, while a URL
+without a `bundle` is still delegated to the application's deep-link handler.
+Bridge calls support bounded, opt-in retries only when the caller supplies an
+idempotency key; security and contract failures are never retried, while an
+optional priority is forwarded as transport metadata. The Android/iOS Lynx
+transport accepts the canonical `{ code, msg, data }` response envelope and
+also understands the original `{ success, value }` envelope for compatibility.
+The host still owns authentication, method allowlists, native thread dispatch
+and business error semantics.
+
+The CLI-generated Android and iOS hosts now provide the same baseline behavior
+without requiring application code to reinvent it: asynchronous bundle loading,
+visible loading and recoverable error states, tap-to-retry, the official Lynx
+first-screen readiness callback, adaptive viewport updates and explicit view
+cleanup. This is a host baseline, not a claim that an existing custom host has
+been rewritten; existing native projects remain application-owned.
+
+The framework also exposes a standard global-props schema modelled on the
+public Lynx host context needed by multi-platform containers: OS identity,
+container ID, logical screen/content dimensions, safe-area insets, pixel ratio,
+accessibility, tablet/notch and low-power indicators, system-bar heights,
+orientation, theme, locale, background state and query items. `@lynxship/expo`
+injects this context automatically on Android and iOS by default and refreshes
+the layout/visibility fields without remounting. Applications can add namespaced
+extensions or set `autoGlobalProps={false}` when they own the complete context.
+The host remains responsible for supplying truthful values on non-Expo targets.
 
 When a project contains a platform-specific `lynx.lib.json`, `lynxship doctor`
 and `lynxship build` verify the official host integration before continuing.

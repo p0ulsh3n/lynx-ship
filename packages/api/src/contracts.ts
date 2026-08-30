@@ -1,4 +1,9 @@
-import { assert, type Platform } from "@lynxship/contracts";
+import {
+  assert,
+  type BuildSourceReference,
+  type Platform,
+} from "@lynxship/contracts";
+import { validateSourceReference } from "@lynxship/build-orchestrator";
 
 export interface BuildRequest {
   projectId: string;
@@ -6,6 +11,7 @@ export interface BuildRequest {
   platform: Platform;
   profile: string;
   sourceHash?: string | null;
+  source?: BuildSourceReference;
   idempotencyKey?: string | null;
 }
 
@@ -32,12 +38,14 @@ export function validateBuildRequest(value: unknown): BuildRequest {
     "CONTRACT_INVALID",
     "Build request platform is invalid",
   );
+  if (input.source) validateSourceReference(input.source);
   return {
     projectId: input.projectId,
     organizationId: input.organizationId,
     platform: input.platform,
     profile: input.profile,
-    sourceHash: input.sourceHash ?? null,
+    sourceHash: input.sourceHash ?? input.source?.hash ?? null,
+    source: input.source,
     idempotencyKey: input.idempotencyKey ?? null,
   };
 }

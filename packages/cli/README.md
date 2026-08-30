@@ -11,6 +11,33 @@ expiring download URL with a compact terminal QR code.
 > native hosts; HarmonyOS requires the official Hvigor/DevEco host; Web and
 > Desktop require the project's official Rspeedy/Lynxtron configuration.
 
+## Sparkling-compatible app configuration
+
+Projects may use the official Sparkling-style `app.config.ts` (or its JavaScript
+variants) as the single Lynx build entrypoint:
+
+```ts
+import { defineConfig } from "@lynx-js/rspeedy";
+
+export default {
+  lynxConfig: defineConfig({
+    source: { entry: { main: "./src/pages/main/index.tsx" } },
+    environments: { lynx: {} },
+  }),
+  appName: "My Lynx app",
+  platform: { android: { packageName: "com.example.myapp" } },
+  paths: { android: "android/app/src/main/assets" },
+};
+```
+
+When `lynxship build` finds this file, it loads it only for the explicit build
+operation, validates its routes/plugins and safe project-relative paths, then
+calls the installed project's `createRspeedy` API with `lynxConfig`. Android
+and iOS host generation also reuses the declared identifiers, name, icon and
+asset paths. `lynxship.json` remains the place for LynxShip profiles, signing,
+OTA and cloud settings; projects with a normal `lynx.config.*` keep their
+existing package-manager build workflow.
+
 ## Install
 
 ```bash
@@ -302,7 +329,7 @@ autolink check       Check Lynx native-library wiring
 autolink codegen     Run native-module codegen
 ota doctor           Check native OTA host integration
 storage configure   Configure Cloudflare R2
-android host init   Create a minimal official Lynx Android host
+android host init   Create an official Lynx Android host baseline
 android configure   Configure Android signing
 store configure      Configure store submission credentials
 ```
@@ -520,9 +547,12 @@ lynxship android host init --application-id com.example.myapp
 
 This command never overwrites an existing `android/` directory. It creates a
 real Gradle application with the official Lynx Android dependencies,
-`LynxEnv`, `LynxView`, a bundle loader and a Gradle wrapper. Replace the example
-application ID before a store release and add any project-specific native
-modules, permissions, services and OTA integration explicitly.
+`LynxEnv`, `LynxView`, a bundle loader and a Gradle wrapper. The generated
+Activity also provides lifecycle-aware loading/error feedback, tap-to-retry,
+the official `onFirstScreen` readiness signal and explicit `LynxView.destroy()`
+cleanup. Replace the example application ID before a store release and add
+any project-specific native modules, permissions, services and OTA integration
+explicitly.
 
 For a pure project that targets iOS, create the native Xcode/CocoaPods host
 with:
@@ -547,7 +577,9 @@ preview only; provide the project icon for an IPA or store release.
 The command refuses to overwrite an existing `ios/` directory and creates a
 Swift host based on Lynx's official integration shape: `LynxEnv`, `LynxView`,
 `LynxTemplateProvider`, `Podfile`, `ExportOptions.plist` and a bundle sync
-script. On macOS, `lynxship build --platform ios` installs CocoaPods before
+script. The generated view also provides adaptive full-screen layout,
+lifecycle-aware loading/error feedback, tap-to-retry and first-screen
+readiness. On macOS, `lynxship build --platform ios` installs CocoaPods before
 archiving. Xcode, CocoaPods and real Apple signing credentials are still
 required for a signed IPA; the CLI never fabricates them.
 

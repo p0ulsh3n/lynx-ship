@@ -27,3 +27,20 @@ test("rejects unsafe keys and values that JSON cannot represent", async () => {
     StorageSerializationError,
   );
 });
+
+test("supports safe namespaces and lazy expiration without changing the adapter", async () => {
+  const adapter = createMemoryStorage();
+  const storage = createDeviceStorage(adapter);
+  await storage.set("token", { value: "secret" }, { namespace: "auth" });
+  assert.deepEqual(await storage.get("token", { namespace: "auth" }), {
+    value: "secret",
+  });
+  assert.equal(await storage.get("token"), null);
+  await storage.set("short", true, { validDurationMs: 1 });
+  await new Promise((resolve) => setTimeout(resolve, 3));
+  assert.equal(await storage.get("short"), null);
+  await assert.rejects(
+    storage.set("key", true, { namespace: "not safe" }),
+    StorageKeyError,
+  );
+});

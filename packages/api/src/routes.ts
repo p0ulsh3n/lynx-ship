@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { TokenManager, type TokenRecord } from "@lynxship/auth";
-import type { BuildJob } from "@lynxship/contracts";
+import type { BuildJob, BuildSourceReference } from "@lynxship/contracts";
+import type { BuildSourceUploadPlan } from "./services/source-storage.js";
 import { FileStorage } from "@lynxship/storage";
 import type { LynxShipApp, RuntimeBackends } from "./app.js";
 import type { ApiOptions } from "./http-api.js";
@@ -25,6 +26,19 @@ export interface ApiRouteContext {
     runtime: RuntimeBackends | undefined,
     job: BuildJob,
   ) => Promise<void>;
+  storeBuildSource: (content: Buffer) => Promise<BuildSourceReference>;
+  loadBuildSource: (reference: BuildSourceReference) => Promise<Buffer>;
+  planBuildSourceUpload: (
+    reference: BuildSourceReference,
+  ) => Promise<BuildSourceUploadPlan>;
+  completeBuildSourceUpload: (
+    reference: BuildSourceReference,
+  ) => Promise<BuildSourceReference>;
+  storeWorkerArtifact: (
+    job: BuildJob,
+    content: Buffer,
+    contentType: string,
+  ) => Promise<NonNullable<BuildJob["artifact"]>>;
   persist: () => Promise<void>;
   identityFor: (request: object) => ApiIdentity | undefined;
   canAccess: (

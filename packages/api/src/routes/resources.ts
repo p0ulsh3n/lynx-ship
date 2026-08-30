@@ -1,9 +1,21 @@
 import type { ApiRouteContext } from "../routes.js";
 import { assert, sha256 } from "@lynxship/contracts";
+import { validateSourceReference } from "@lynxship/build-orchestrator";
 import { S3ObjectStorage } from "@lynxship/storage";
 
 export function registerResourcesRoutes(context: ApiRouteContext): void {
-  const { server, app, runtime, artifactStore, persist, identityFor } = context;
+  const {
+    server,
+    app,
+    runtime,
+    artifactStore,
+    persist,
+    identityFor,
+    canAccess,
+    storeBuildSource,
+    planBuildSourceUpload,
+    completeBuildSourceUpload,
+  } = context;
   server.post("/v1/organizations", async (request, reply) => {
     const body = request.body as { name: string; ownerUserId: string };
     const organization = app.tenants.createOrganization(
@@ -24,6 +36,93 @@ export function registerResourcesRoutes(context: ApiRouteContext): void {
     const organizationId =
       query.organizationId ?? identityFor(request)?.organizationId ?? "";
     return app.tenants.listProjects(organizationId);
+  });
+  server.post("/v1/build-sources", async (request, reply) => {
+    const body = request.body as {
+      projectId?: string;
+      organizationId?: string;
+      dataBase64?: string;
+    };
+    assert(
+      body.projectId && body.organizationId && body.dataBase64,
+      "SOURCE_INPUT",
+      "Project, organization and source data are required",
+    );
+    assert(
+      canAccess(request, {
+        organizationId: body.organizationId,
+        projectId: body.projectId,
+      }),
+      "FORBIDDEN",
+      "Source is outside the authenticated tenant",
+    );
+    const content = Buffer.from(body.dataBase64, "base64");
+    assert(
+      content.toString("base64") === body.dataBase64,
+      "SOURCE_BASE64_INVALID",
+      "Source data must be canonical base64",
+    );
+    const source = await storeBuildSource(content);
+    await persist();
+    return reply.code(201).send({
+      source,
+      projectId: body.projectId,
+      organizationId: body.organizationId,
+    });
+  });
+  server.post("/v1/build-sources/upload-plan", async (request, reply) => {
+    const body = request.body as {
+      projectId?: string;
+      organizationId?: string;
+      source?: unknown;
+    };
+    assert(
+      body.projectId && body.organizationId && body.source,
+      "SOURCE_INPUT",
+      "Project, organization and source reference are required",
+    );
+    assert(
+      canAccess(request, {
+        organizationId: body.organizationId,
+        projectId: body.projectId,
+      }),
+      "FORBIDDEN",
+      "Source is outside the authenticated tenant",
+    );
+    validateSourceReference(body.source);
+    const plan = await planBuildSourceUpload(body.source);
+    return reply.code(201).send({
+      ...plan,
+      projectId: body.projectId,
+      organizationId: body.organizationId,
+    });
+  });
+  server.post("/v1/build-sources/complete", async (request, reply) => {
+    const body = request.body as {
+      projectId?: string;
+      organizationId?: string;
+      source?: unknown;
+    };
+    assert(
+      body.projectId && body.organizationId && body.source,
+      "SOURCE_INPUT",
+      "Project, organization and source reference are required",
+    );
+    assert(
+      canAccess(request, {
+        organizationId: body.organizationId,
+        projectId: body.projectId,
+      }),
+      "FORBIDDEN",
+      "Source is outside the authenticated tenant",
+    );
+    validateSourceReference(body.source);
+    const source = await completeBuildSourceUpload(body.source);
+    return reply.code(200).send({
+      source,
+      projectId: body.projectId,
+      organizationId: body.organizationId,
+    });
   });
   server.post("/v1/artifacts", async (request, reply) => {
     const body = request.body as {

@@ -1,0 +1,23 @@
+{
+  "name": "@lynxship/worker-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tenant-bound hosted build worker orchestration for LynxShip.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false"
+  },
+  "dependencies": {
+    "@lynxship/build-orchestrator": "workspace:*",
+    "@lynxship/contracts": "workspace:*",
+    "@lynxship/queue": "workspace:*",
+    "@lynxship/worker-agent": "workspace:*"
+  }
+}

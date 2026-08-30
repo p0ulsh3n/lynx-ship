@@ -36,6 +36,26 @@ const CATALOG = [
     "Resolve routes, history, and deep-link paths.",
   ],
   [
+    "@lynxship/framework",
+    "runtime",
+    "Coordinate host lifecycle, bundle mounting, capabilities, and first-screen readiness.",
+  ],
+  [
+    "@lynxship/navigation",
+    "runtime",
+    "Validate navigation targets and delegate transitions to an injected host adapter.",
+  ],
+  [
+    "@lynxship/bridge",
+    "runtime",
+    "Expose allow-listed, bounded JavaScript-to-native calls through an injected transport.",
+  ],
+  [
+    "@lynxship/performance",
+    "runtime",
+    "Collect bounded Lynx performance entries and export them through an explicit sink.",
+  ],
+  [
     "@lynxship/device-storage",
     "runtime",
     "Use an async device-storage adapter with typed JSON values.",

@@ -4,7 +4,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TokenManager } from "@lynxship/auth";
-import { LocalBuildExecutor } from "@lynxship/build-orchestrator";
+import {
+  createSourceSnapshot,
+  LocalBuildExecutor,
+} from "@lynxship/build-orchestrator";
 import {
   createApi,
   loadPersistentApp,
@@ -211,12 +214,47 @@ test("tenant-scoped tokens cannot create or read another organization's builds",
   assert.equal((scopedList.json() as Array<{ id: string }>)[0]?.id, job.id);
 });
 
+test("project-scoped credentials cannot mint org tokens or manage workers", async (t) => {
+  const manager = new TokenManager();
+  const token = manager.create({
+    name: "project-credentials",
+    organizationId: "org-a",
+    projectId: "project-a",
+    scopes: ["credentials:write", "worker:manage"],
+  });
+  const server = createApi({ tokenManager: manager });
+  t.after(() => server.close());
+  const headers = { authorization: `Bearer ${token.value}` };
+  const minted = await server.inject({
+    method: "POST",
+    url: "/v1/tokens",
+    headers,
+    payload: {
+      name: "org-token",
+      organizationId: "org-a",
+      scopes: ["build:write"],
+    },
+  });
+  assert.equal(minted.statusCode, 403);
+  const worker = await server.inject({
+    method: "POST",
+    url: "/v1/workers",
+    headers,
+    payload: {
+      name: "linux-1",
+      organizationId: "org-a",
+      platform: "android",
+    },
+  });
+  assert.equal(worker.statusCode, 403);
+});
+
 test("worker lifecycle is tenant-scoped and persists heartbeat state", async (t) => {
   const manager = new TokenManager();
   const token = manager.create({
     name: "worker-control",
     organizationId: "org-a",
-    scopes: ["build:write"],
+    scopes: ["worker:manage"],
   });
   const server = createApi({ tokenManager: manager });
   t.after(() => server.close());
@@ -251,6 +289,170 @@ test("worker lifecycle is tenant-scoped and persists heartbeat state", async (t)
     },
   });
   assert.equal(foreign.statusCode, 403);
+});
+
+test("worker reports require a bound worker token and matching platform", async (t) => {
+  const manager = new TokenManager();
+  const control = manager.create({
+    name: "worker-control",
+    organizationId: "org-a",
+    scopes: ["worker:manage", "build:write"],
+  });
+  const server = createApi({ tokenManager: manager });
+  t.after(() => server.close());
+  const controlHeaders = {
+    authorization: `Bearer ${control.value}`,
+  };
+  const createdWorker = await server.inject({
+    method: "POST",
+    url: "/v1/workers",
+    headers: controlHeaders,
+    payload: {
+      name: "linux-1",
+      organizationId: "org-a",
+      platform: "android",
+    },
+  });
+  const worker = createdWorker.json() as { id: string };
+  const jobResponse = await server.inject({
+    method: "POST",
+    url: "/v1/builds",
+    headers: controlHeaders,
+    payload: {
+      projectId: "project-a",
+      organizationId: "org-a",
+      platform: "android",
+      profile: "production",
+    },
+  });
+  const job = jobResponse.json() as { id: string };
+  const loaded = await server.inject({
+    method: "GET",
+    url: `/v1/worker-builds/${job.id}`,
+    headers: {
+      authorization: `Bearer ${control.value}`,
+      "x-lynxship-worker-id": worker.id,
+    },
+  });
+  assert.equal(loaded.statusCode, 200);
+  assert.equal((loaded.json() as { id: string }).id, job.id);
+  const workerToken = manager.create({
+    name: "linux-1-agent",
+    organizationId: "org-a",
+    workerId: worker.id,
+    scopes: ["worker:report"],
+  });
+  const report = await server.inject({
+    method: "POST",
+    url: `/v1/builds/${job.id}/report`,
+    headers: {
+      authorization: `Bearer ${workerToken.value}`,
+      "x-lynxship-worker-id": worker.id,
+    },
+    payload: { state: "uploading_source" },
+  });
+  assert.equal(report.statusCode, 200);
+  assert.equal((report.json() as { state: string }).state, "uploading_source");
+
+  const wrongWorker = await server.inject({
+    method: "POST",
+    url: `/v1/builds/${job.id}/report`,
+    headers: {
+      authorization: `Bearer ${workerToken.value}`,
+      "x-lynxship-worker-id": "wrk_other",
+    },
+    payload: { state: "queued" },
+  });
+  assert.equal(wrongWorker.statusCode, 403);
+});
+
+test("bound workers upload binary artifacts only in the artifact stage", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "lynxship-worker-artifact-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const manager = new TokenManager();
+  const control = manager.create({
+    name: "worker-control",
+    organizationId: "org-a",
+    scopes: ["worker:manage", "build:write"],
+  });
+  const server = createApi({
+    tokenManager: manager,
+    artifactRoot: join(root, "objects"),
+  });
+  t.after(() => server.close());
+  const controlHeaders = { authorization: `Bearer ${control.value}` };
+  const createdWorker = await server.inject({
+    method: "POST",
+    url: "/v1/workers",
+    headers: controlHeaders,
+    payload: {
+      name: "linux-1",
+      organizationId: "org-a",
+      platform: "android",
+    },
+  });
+  const worker = createdWorker.json() as { id: string };
+  const workerToken = manager.create({
+    name: "linux-1-agent",
+    organizationId: "org-a",
+    workerId: worker.id,
+    scopes: ["worker:report"],
+  });
+  const jobResponse = await server.inject({
+    method: "POST",
+    url: "/v1/builds",
+    headers: controlHeaders,
+    payload: {
+      projectId: "project-a",
+      organizationId: "org-a",
+      platform: "android",
+      profile: "production",
+    },
+  });
+  const job = jobResponse.json() as { id: string };
+  const workerHeaders = {
+    authorization: `Bearer ${workerToken.value}`,
+    "x-lynxship-worker-id": worker.id,
+  };
+  for (const state of [
+    "uploading_source",
+    "queued",
+    "provisioning",
+    "installing_dependencies",
+    "building",
+    "signing",
+    "uploading_artifacts",
+  ] as const) {
+    const response = await server.inject({
+      method: "POST",
+      url: `/v1/builds/${job.id}/report`,
+      headers: workerHeaders,
+      payload: { state },
+    });
+    assert.equal(response.statusCode, 200);
+  }
+  const artifact = await server.inject({
+    method: "POST",
+    url: `/v1/worker-builds/${job.id}/artifact`,
+    headers: { ...workerHeaders, "content-type": "application/octet-stream" },
+    payload: Buffer.from("signed apk bytes"),
+  });
+  assert.equal(artifact.statusCode, 201);
+  const uploaded = artifact.json() as {
+    artifact: { hash: string; size: number; key: string };
+  };
+  assert.equal(uploaded.artifact.hash, sha256("signed apk bytes"));
+  assert.equal(uploaded.artifact.size, 16);
+  assert.match(uploaded.artifact.key, /^sha256\/[a-f0-9]{64}$/);
+
+  const terminal = await server.inject({
+    method: "POST",
+    url: `/v1/builds/${job.id}/report`,
+    headers: workerHeaders,
+    payload: { state: "success", artifact: uploaded.artifact },
+  });
+  assert.equal(terminal.statusCode, 200);
+  assert.equal((terminal.json() as { state: string }).state, "success");
 });
 
 test("OTA API rolls a channel back to a compatible release", async (t) => {
@@ -428,6 +630,76 @@ test("artifact upload stores the exact binary and returns its hash", async () =>
     "artifacts/project/build/app-release.apk",
   );
   await server.close();
+});
+
+test("source upload and worker source read preserve an authenticated immutable snapshot", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "lynxship-source-api-"));
+  const projectRoot = join(root, "project");
+  await mkdir(projectRoot, { recursive: true });
+  await writeFile(join(projectRoot, "main.ts"), "export default 1;\n");
+  const created = await createSourceSnapshot(projectRoot);
+  const server = createApi({ artifactRoot: join(root, "objects") });
+  t.after(async () => {
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const uploaded = await server.inject({
+    method: "POST",
+    url: "/v1/build-sources",
+    payload: {
+      projectId: "project-a",
+      organizationId: "org-a",
+      dataBase64: created.bytes.toString("base64"),
+    },
+  });
+  assert.equal(uploaded.statusCode, 201);
+  const source = uploaded.json().source as {
+    key: string;
+    hash: string;
+    size: number;
+    contentType: string;
+    fileCount: number;
+  };
+  assert.deepEqual(
+    { ...source, key: created.reference.key },
+    created.reference,
+  );
+  assert.equal(source.key, "sha256/" + created.reference.hash);
+  const worker = await server.inject({
+    method: "POST",
+    url: "/v1/workers",
+    payload: {
+      name: "android-source-reader",
+      organizationId: "org-a",
+      platform: "android",
+    },
+  });
+  assert.equal(worker.statusCode, 201);
+  const workerId = (worker.json() as { id: string }).id;
+  const build = await server.inject({
+    method: "POST",
+    url: "/v1/builds",
+    payload: {
+      projectId: "project-a",
+      organizationId: "org-a",
+      platform: "android",
+      profile: "production",
+      source,
+    },
+  });
+  assert.equal(build.statusCode, 201);
+  const buildId = (build.json() as { id: string }).id;
+  const downloaded = await server.inject({
+    method: "GET",
+    url: "/v1/worker-builds/" + buildId + "/source",
+    headers: { "x-lynxship-worker-id": workerId },
+  });
+  assert.equal(downloaded.statusCode, 200);
+  assert.equal(downloaded.headers["content-type"], source.contentType);
+  assert.deepEqual(
+    Uint8Array.from(downloaded.rawPayload),
+    Uint8Array.from(created.bytes),
+  );
 });
 
 test("OTA API exposes its public key and serves the eligible signed bundle", async (t) => {

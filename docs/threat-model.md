@@ -27,6 +27,12 @@ Current controls:
   ciphertext under the stable `LYNXSHIP_CREDENTIAL_MASTER_KEY`; the key itself
   remains outside the database and repository.
 - Build jobs have explicit transitions, attempts and provider boundaries.
+- Worker lifecycle and build-report scopes are separate from general build
+  access. Agent tokens can be bound to one worker; reports require the bound
+  worker ID, matching organization and platform, and revoked workers cannot
+  report state.
+- Repeated worker state reports are idempotent to tolerate Redis at-least-once
+  delivery without accepting an arbitrary state transition.
 - Content-addressed storage prevents accidental overwrite of an existing object.
 - Webhook signatures bind a timestamp and exact body.
 

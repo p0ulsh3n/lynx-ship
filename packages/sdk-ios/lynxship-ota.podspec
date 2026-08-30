@@ -8,4 +8,5 @@ Pod::Spec.new do |s|
   s.source_files = 'Sources/**/*.{h,m,mm,swift}'
   s.platform = :ios, '15.0'
   s.swift_version = '5.9'
+  s.dependency 'Lynx', :subspecs => ['Framework']
 end

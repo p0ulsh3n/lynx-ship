@@ -1,0 +1,32 @@
+{
+  "name": "@lynxship/worker-runtime",
+  "version": "0.1.0",
+  "description": "Secure LynxShip hosted-worker bootstrap for Redis and the control plane.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    }
+  },
+  "bin": {
+    "lynxship-worker": "dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json --pretty false"
+  },
+  "dependencies": {
+    "@lynxship/contracts": "workspace:*",
+    "@lynxship/cli": "workspace:*",
+    "@lynxship/queue": "workspace:*",
+    "@lynxship/worker-agent": "workspace:*",
+    "@lynxship/worker-service": "workspace:*"
+  }
+}

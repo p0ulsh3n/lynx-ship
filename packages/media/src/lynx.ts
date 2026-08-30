@@ -1,8 +1,26 @@
 import {
   MediaCapabilityError,
+  type MediaDataUrlRequest,
+  type MediaDownloadRequest,
+  type MediaDownloadResult,
+  type MediaFileRequest,
   type MediaClient,
   type MediaKind,
+  type MediaSelectionOptions,
+  type MediaSelectionResult,
+  type MediaUploadResult,
 } from "./contracts.js";
+import {
+  validateMediaDataURLRequest,
+  validateMediaDownloadRequest,
+  validateMediaDownloadResult,
+  validateMediaFileRequest,
+  validateMediaUploadResult,
+} from "./transfer.js";
+import {
+  validateMediaSelectionOptions,
+  validateMediaSelectionResult,
+} from "./selection.js";
 
 export interface LynxMediaModule {
   getCapabilities(callback: (capabilities: string) => void): void;
@@ -11,9 +29,14 @@ export interface LynxMediaModule {
     kind: "photo-library" | "video-library",
     callback: (uri: string) => void,
   ): void;
+  chooseMedia?(request: string, callback: (result: string) => void): void;
   capture(kind: "camera" | "microphone", callback: (uri: string) => void): void;
   startRecording?(callback: (started: boolean) => void): void;
   stopRecording?(callback: (uri: string) => void): void;
+  uploadFile?(request: string, callback: (result: string) => void): void;
+  uploadImage?(request: string, callback: (result: string) => void): void;
+  downloadFile?(request: string, callback: (result: string) => void): void;
+  saveDataURL?(request: string, callback: (result: string) => void): void;
 }
 
 /** Resolve the native module at call time so Node and Web imports stay safe. */
@@ -88,9 +111,127 @@ export function createLynxMediaClient(
         "selection",
       );
     },
+    chooseMedia: (options) =>
+      callSelection(module, validateMediaSelectionOptions(options)),
     startRecording: () => startNativeRecording(module, capabilities),
     stopRecording: () => stopNativeRecording(module, capabilities),
+    uploadFile: (request) =>
+      callTransfer(module, "uploadFile", validateMediaFileRequest(request)),
+    uploadImage: (request) =>
+      callTransfer(module, "uploadImage", validateMediaFileRequest(request)),
+    downloadFile: (request) =>
+      callTransfer(
+        module,
+        "downloadFile",
+        validateMediaDownloadRequest(request),
+      ),
+    saveDataURL: (request) =>
+      callTransfer(module, "saveDataURL", validateMediaDataURLRequest(request)),
   };
+}
+
+function callSelection(
+  module: LynxMediaModule,
+  options: MediaSelectionOptions,
+): Promise<MediaSelectionResult> {
+  if (typeof module.chooseMedia !== "function")
+    return Promise.reject(
+      new MediaCapabilityError(
+        "The native media module does not support chooseMedia().",
+      ),
+    );
+  return new Promise((resolve, reject) => {
+    try {
+      module.chooseMedia!(JSON.stringify(options), (raw) => {
+        try {
+          const result = JSON.parse(raw) as {
+            code?: number;
+            data?: MediaSelectionResult;
+            msg?: string;
+          };
+          if (result.code !== 1 || !result.data)
+            throw new Error(result.msg ?? "Media selection failed.");
+          resolve(validateMediaSelectionResult(result.data));
+        } catch (error) {
+          reject(
+            new MediaCapabilityError(
+              error instanceof Error
+                ? error.message
+                : "Media selection failed.",
+            ),
+          );
+        }
+      });
+    } catch (error) {
+      reject(
+        new MediaCapabilityError(
+          error instanceof Error ? error.message : "Media selection failed.",
+        ),
+      );
+    }
+  });
+}
+
+type TransferCallback = (
+  request: string,
+  callback: (result: string) => void,
+) => void;
+
+function callTransfer(
+  module: LynxMediaModule,
+  operation: "uploadFile" | "uploadImage",
+  request: MediaFileRequest,
+): Promise<MediaUploadResult>;
+function callTransfer(
+  module: LynxMediaModule,
+  operation: "downloadFile" | "saveDataURL",
+  request: MediaDownloadRequest | MediaDataUrlRequest,
+): Promise<MediaDownloadResult>;
+function callTransfer(
+  module: LynxMediaModule,
+  operation: "uploadFile" | "uploadImage" | "downloadFile" | "saveDataURL",
+  request: MediaFileRequest | MediaDownloadRequest | MediaDataUrlRequest,
+): Promise<MediaUploadResult | MediaDownloadResult> {
+  const invoke = module[operation] as TransferCallback | undefined;
+  if (!invoke)
+    return Promise.reject(
+      new MediaCapabilityError(
+        `The native media module does not support ${operation}().`,
+      ),
+    );
+  return new Promise((resolve, reject) => {
+    try {
+      invoke(JSON.stringify(request), (raw) => {
+        try {
+          const result = JSON.parse(raw) as {
+            code?: number;
+            data?: unknown;
+            msg?: string;
+          };
+          if (result.code !== 1 || !result.data)
+            throw new Error(result.msg ?? `Media ${operation} failed.`);
+          if (operation === "uploadFile" || operation === "uploadImage")
+            resolve(validateMediaUploadResult(result.data));
+          else
+            resolve(validateMediaDownloadResult(result.data, request.maxBytes));
+        } catch (error) {
+          reject(
+            new MediaCapabilityError(
+              error instanceof Error
+                ? error.message
+                : `Media ${operation} failed.`,
+            ),
+          );
+        }
+      });
+    } catch (error) {
+      reject(
+        new MediaCapabilityError(
+          error instanceof Error ? error.message : `Media ${operation} failed.`,
+        ),
+      );
+    }
+  });
 }
 
 function requireNativeCapability(

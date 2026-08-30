@@ -47,6 +47,22 @@ test("detects upstreamed Miso Native projects as Nix bundle projects", async () 
   });
 });
 
+test("detects Sparkling-style app.config projects as Rspeedy Lynx apps", async () => {
+  const root = await mkdtemp(join(tmpdir(), "lynxship-app-config-"));
+  await writeFile(
+    join(root, "app.config.ts"),
+    "export default { lynxConfig: {}, platform: { android: {} } };\n",
+  );
+
+  assert.deepEqual(await detectLynxFramework(root), {
+    framework: "vanilla",
+    label: "Vanilla Lynx",
+    evidence: "Rspeedy/Lynx project detected",
+    buildSystem: "rspeedy",
+    experimental: false,
+  });
+});
+
 test("resolves current and legacy Miso flake bundle outputs", () => {
   assert.equal(
     resolveMisoBuildTarget(

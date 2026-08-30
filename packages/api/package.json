@@ -26,6 +26,7 @@
     "@lynxship/signing": "workspace:*",
     "@lynxship/submit": "workspace:*",
     "@lynxship/worker-agent": "workspace:*",
+    "@lynxship/worker-service": "workspace:*",
     "@lynxship/storage": "workspace:*",
     "fastify": "^5.4.0"
   }
